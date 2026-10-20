@@ -1,6 +1,11 @@
 import type { DBTransactionAdapter } from 'better-auth/adapters'
 import { describe, expect, it, vi } from 'vitest'
-import { authModelUsesPhysicalDeletion, deleteAuthRecord, deleteManyAuthRecords } from './auth-database-adapter.js'
+import {
+  authModelUsesPhysicalDeletion,
+  deleteAuthRecord,
+  deleteManyAuthRecords,
+  withModelActiveRecord,
+} from './auth-database-adapter.js'
 
 describe('auth database deletion policy', () => {
   it('physically deletes only ephemeral Better Auth rate-limit records', () => {
@@ -9,6 +14,14 @@ describe('auth database deletion policy', () => {
     expect(authModelUsesPhysicalDeletion('session')).toBe(false)
     expect(authModelUsesPhysicalDeletion('account')).toBe(false)
     expect(authModelUsesPhysicalDeletion('verification')).toBe(false)
+  })
+
+  it('does not inject the application-only deletedAt field into Better Auth rate-limit queries', () => {
+    const where = [{ field: 'key', value: 'sign-in:client' }]
+
+    expect(withModelActiveRecord('rateLimit', where)).toBe(where)
+    expect(withModelActiveRecord('user', where)).toEqual([...where, { field: 'deletedAt', value: null }])
+    expect(withModelActiveRecord('rateLimit', undefined)).toBeUndefined()
   })
 
   it('delegates rate-limit cleanup to physical deletion', async () => {

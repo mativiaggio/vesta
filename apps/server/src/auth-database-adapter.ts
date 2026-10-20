@@ -13,6 +13,10 @@ export function authModelUsesPhysicalDeletion(model: string): boolean {
   return model === 'rateLimit'
 }
 
+export function withModelActiveRecord(model: string, where: Where[] | undefined): Where[] | undefined {
+  return authModelUsesPhysicalDeletion(model) ? where : withActiveRecord(where)
+}
+
 type SingleDeleteAdapter = Pick<DBTransactionAdapter, 'delete' | 'update'>
 type BulkDeleteAdapter = Pick<DBTransactionAdapter, 'deleteMany' | 'updateMany'>
 
@@ -49,26 +53,32 @@ export function withSoftDeletes(adapter: DBTransactionAdapter): DBTransactionAda
   return {
     ...adapter,
     findOne: <T>(data: Parameters<DBTransactionAdapter['findOne']>[0]) =>
-      adapter.findOne<T>({ ...data, where: withActiveRecord(data.where) }),
+      adapter.findOne<T>({ ...data, where: withModelActiveRecord(data.model, data.where) ?? [] }),
     findMany: <T>(data: Parameters<DBTransactionAdapter['findMany']>[0]) =>
-      adapter.findMany<T>({ ...data, where: withActiveRecord(data.where) }),
+      adapter.findMany<T>({ ...data, where: withModelActiveRecord(data.model, data.where) }),
     count: (data: Parameters<DBTransactionAdapter['count']>[0]) =>
-      adapter.count({ ...data, where: withActiveRecord(data.where) }),
+      adapter.count({ ...data, where: withModelActiveRecord(data.model, data.where) }),
     update: <T>(data: Parameters<DBTransactionAdapter['update']>[0]) =>
-      adapter.update<T>({ ...data, where: withActiveRecord(data.where) }),
+      adapter.update<T>({ ...data, where: withModelActiveRecord(data.model, data.where) ?? [] }),
     updateMany: (data: Parameters<DBTransactionAdapter['updateMany']>[0]) =>
-      adapter.updateMany({ ...data, where: withActiveRecord(data.where) }),
+      adapter.updateMany({ ...data, where: withModelActiveRecord(data.model, data.where) ?? [] }),
     incrementOne: <T>(data: Parameters<DBTransactionAdapter['incrementOne']>[0]) =>
-      adapter.incrementOne<T>({ ...data, where: withActiveRecord(data.where) }),
+      adapter.incrementOne<T>({ ...data, where: withModelActiveRecord(data.model, data.where) ?? [] }),
     delete: (data: Parameters<DBTransactionAdapter['delete']>[0]) => deleteAuthRecord(adapter, data),
     deleteMany: (data: Parameters<DBTransactionAdapter['deleteMany']>[0]) => deleteManyAuthRecords(adapter, data),
     consumeOne: async <T>(data: Parameters<DBTransactionAdapter['consumeOne']>[0]) => {
-      const [row] = await adapter.findMany<T>({ ...data, where: withActiveRecord(data.where), limit: 1 })
+      const activeWhere = withModelActiveRecord(data.model, data.where) ?? []
+      const [row] = await adapter.findMany<T>({ ...data, where: activeWhere, limit: 1 })
       if (!row || typeof row !== 'object' || !('id' in row) || typeof row.id !== 'string') return null
+
+      if (authModelUsesPhysicalDeletion(data.model)) {
+        await adapter.delete({ model: data.model, where: [...activeWhere, { field: 'id', value: row.id }] })
+        return row
+      }
 
       return adapter.update<T>({
         model: data.model,
-        where: [...withActiveRecord(data.where), { field: 'id', value: row.id }],
+        where: [...activeWhere, { field: 'id', value: row.id }],
         update: { deletedAt: new Date(), updatedAt: new Date() },
       })
     },
