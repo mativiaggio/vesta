@@ -1,0 +1,23 @@
+# Vesta
+
+Vesta is a focused digital office for independent professionals. The initial shared React UI provides sign in and sign up screens.
+
+## Development
+
+- Install dependencies: `npm install`
+- Copy `.env.example` to `.env`, set a 32+ character `BETTER_AUTH_SECRET`, and point `DATABASE_URL` at PostgreSQL.
+- Apply the reviewed database migration: `npm run db:migrate`
+- Start the API in one terminal: `npm run dev:server`
+- Start the web UI in another terminal: `npm run dev`
+- Start the Tauri desktop shell: `npm run tauri -- dev`
+- Create the web build: `npm run build`
+- Type-check the API: `npm run build:server`
+- Build the desktop app: `npm run tauri -- build`
+
+## Project status
+
+Email/password sign up, sign in, sign out, session lookup, and password reset use Better Auth. The server is Hono on Node.js and PostgreSQL persistence uses Drizzle migrations. See [authentication setup](docs/authentication.md) for self-hosted and cloud configuration.
+
+Registration creates a user only. Workspace creation is intentionally deferred to the next iteration. The authenticated screen is the supplied “A little more room” empty state.
+
+The selected web tooling is documented in [ADR 0001](docs/adr/0001-web-ui-tooling.md); desktop shell choices are in [ADR 0002](docs/adr/0002-desktop-shell.md).

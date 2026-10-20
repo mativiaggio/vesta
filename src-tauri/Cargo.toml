@@ -1,0 +1,20 @@
+[package]
+name = "vesta"
+version = "0.1.0"
+description = "A focused digital office for independent professionals"
+authors = ["Vesta contributors"]
+license = "Apache-2.0"
+edition = "2024"
+rust-version = "1.90"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+name = "vesta_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.3", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.4", features = [] }

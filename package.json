@@ -1,0 +1,51 @@
+{
+  "name": "vesta",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:server": "tsx watch apps/server/src/index.ts",
+    "build": "tsc -b && vite build",
+    "build:server": "tsc -p apps/server/tsconfig.json",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "^1.7.12",
+    "@fontsource-variable/manrope": "^5.3.0",
+    "@hono/node-server": "^2.1.5",
+    "@radix-ui/react-slot": "^1.2.3",
+    "better-auth": "^1.7.12",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "dotenv": "^18.0.8",
+    "drizzle-orm": "^0.45.4",
+    "hono": "^4.13.13",
+    "lucide-react": "^0.468.0",
+    "pg": "^8.23.1",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "resend": "^6.34.1",
+    "tailwind-merge": "^3.3.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.14",
+    "@tauri-apps/cli": "^2.12.3",
+    "@types/pg": "^8.23.1",
+    "@types/react": "^19.2.2",
+    "@types/react-dom": "^19.2.2",
+    "@vitejs/plugin-react": "^5.0.4",
+    "drizzle-kit": "^0.31.11",
+    "tailwindcss": "^4.1.14",
+    "tsx": "^4.23.15",
+    "typescript": "~5.9.3",
+    "vite": "^7.1.9"
+  },
+  "overrides": {
+    "esbuild": "^0.28.2"
+  }
+}
