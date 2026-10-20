@@ -19,6 +19,6 @@ In desktop development, API logs share the terminal running `npm run tauri dev`.
 
 Email/password sign up, sign in, sign out, session lookup, and password reset use Better Auth. The server is Hono on Node.js and PostgreSQL persistence uses Drizzle migrations. See [authentication setup](docs/authentication.md) for self-hosted and cloud configuration.
 
-Registration creates a user only. Workspace creation is intentionally deferred to the next iteration. The authenticated screen is the supplied “A little more room” empty state.
+After registration, users create their first workspace. Each workspace has a name, an accent color, and an identifying icon; returning users open the last workspace they used. Workspace selection and creation are handled by the authenticated server API and PostgreSQL. The workspace screen remains an early product surface while task, document, and client features are built.
 
 The selected web tooling is documented in [ADR 0001](docs/adr/0001-web-ui-tooling.md); desktop shell choices are in [ADR 0002](docs/adr/0002-desktop-shell.md).

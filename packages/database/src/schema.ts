@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { boolean, index, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
+import { boolean, check, index, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -52,4 +52,28 @@ export const verification = pgTable('verification', {
   ...timestamps,
 }, (table) => [index('verification_identifier_idx').on(table.identifier)])
 
-export const authSchema = { user, session, account, verification }
+export const workspace = pgTable('workspace', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  accentColor: text('accent_color').notNull(),
+  icon: text('icon').notNull(),
+  ...timestamps,
+}, (table) => [
+  check('workspace_accent_color_check', sql`${table.accentColor} IN ('olive', 'blue', 'terracotta', 'plum', 'teal', 'graphite')`),
+  check('workspace_icon_check', sql`${table.icon} IN ('briefcase', 'folder', 'layers', 'notebook-pen', 'laptop', 'palette')`),
+])
+
+export const workspaceMembership = pgTable('workspace_membership', {
+  id: text('id').primaryKey(),
+  workspaceId: text('workspace_id').notNull().references(() => workspace.id),
+  userId: text('user_id').notNull().references(() => user.id),
+  role: text('role').notNull().default('owner'),
+  lastAccessedAt: timestamp('last_accessed_at', { withTimezone: true }),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex('workspace_membership_active_unique').on(table.workspaceId, table.userId).where(sql`${table.deletedAt} IS NULL`),
+  index('workspace_membership_user_last_accessed_idx').on(table.userId, table.lastAccessedAt).where(sql`${table.deletedAt} IS NULL`),
+  index('workspace_membership_user_created_at_idx').on(table.userId, table.createdAt).where(sql`${table.deletedAt} IS NULL`),
+])
+
+export const authSchema = { user, session, account, verification, workspace, workspaceMembership }

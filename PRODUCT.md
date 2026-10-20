@@ -20,7 +20,7 @@ Vesta brings tasks, documents, and client work into one quiet digital office so 
 
 ## Capabilities and Constraints
 
-The initial requested surface is sign in and sign up. Better Auth is the confirmed authentication solution. Its server integration, API, and persistence are not yet implemented; the initial screen must not imply otherwise.
+Vesta supports email/password authentication and user-owned workspaces with a name, accent color, and identifying icon. The first sign-in creates a workspace; returning users resume their most recently used workspace. Workspaces use the authenticated PostgreSQL API in web and Tauri. Tasks, documents, clients, local durable storage, and synchronization are not implemented yet.
 
 ## Brand Commitments
 

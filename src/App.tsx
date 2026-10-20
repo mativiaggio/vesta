@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { ArrowRight, Eye, EyeOff, LoaderCircle, LogOut, Moon, Sun } from 'lucide-react'
+import { lazy, Suspense, useEffect, useState, type FormEvent } from 'react'
+import { ArrowRight, Eye, EyeOff, LoaderCircle, Moon, Sun } from 'lucide-react'
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
 import { authClient } from './features/auth/data/auth-client'
@@ -7,6 +7,8 @@ import { LanguageSelector } from './features/localization/components/language-se
 import { useLanguage } from './features/localization/language-context'
 import { translations } from './features/localization/translations'
 import { readThemePreference, saveThemePreference, type Theme } from './features/preferences/theme-preference'
+
+const WorkspaceExperience = lazy(() => import('./features/workspaces/components/workspace-experience').then((module) => ({ default: module.WorkspaceExperience })))
 
 type AuthMode = 'signup' | 'signin' | 'recovery'
 type FeedbackKey = keyof typeof translations.en.feedback
@@ -52,27 +54,13 @@ export default function App() {
 
   if (session?.user) {
     return (
-      <main className="office-ready">
-        <div className="office-controls">
-          <LanguageSelector />
-          <Button
-            className="office-signout"
-            variant="ghost"
-            size="icon"
-            type="button"
-            aria-label={t('app', 'signOut')}
-            title={t('app', 'signOut')}
-            onClick={() => { void authClient.signOut() }}
-          >
-            <LogOut size={17} aria-hidden="true" />
-          </Button>
-        </div>
-        <div className="office-ready-content">
-          <img className="office-ready-logo" src="/brand/logo-vesta.svg" alt="Vesta" />
-          <h1>{t('office', 'heading')}</h1>
-          <p>{t('office', 'description')}</p>
-        </div>
-      </main>
+      <Suspense fallback={<main className="session-loading" aria-label={t('app', 'opening')} />}>
+        <WorkspaceExperience
+          theme={theme}
+          onToggleTheme={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+          onSignOut={() => { void authClient.signOut() }}
+        />
+      </Suspense>
     )
   }
 

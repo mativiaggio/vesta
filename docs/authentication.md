@@ -2,7 +2,7 @@
 
 Vesta uses Better Auth for email/password registration, sign in, database-backed sessions, sign out, and password recovery. The web and Tauri clients use the same API. The API validates every configured origin and uses credentialed CORS; wildcard origins are not supported.
 
-The shared Better Auth adapter soft-deletes identity, session, account, and verification rows, filters deleted rows from reads and writes, and consumes one-time verification rows atomically. `GET /api/me` demonstrates the server session guard for application routes; workspace authorization will be added with workspace ownership in the next iteration. Cookies are HTTP-only and Secure with `SameSite=None` so the Tauri webview can call a separately hosted API; Better Auth's trusted-origin checks and exact CORS allowlist remain enabled. Cloud API URLs must use HTTPS.
+The shared Better Auth adapter soft-deletes identity, session, account, and verification rows, filters deleted rows from reads and writes, and consumes one-time verification rows atomically. `GET /api/me` and the workspace routes require a server-validated session. Workspace reads and activation are scoped through the signed-in user's active membership; clients cannot submit ownership IDs. Cookies are HTTP-only and Secure with `SameSite=None` so the Tauri webview can call a separately hosted API; Better Auth's trusted-origin checks and exact CORS allowlist remain enabled. Cloud API URLs must use HTTPS.
 
 ## Self-hosted
 
@@ -22,6 +22,6 @@ Set `DEPLOYMENT_MODE=cloud`, `RESEND_API_KEY`, `EMAIL_FROM`, `DATABASE_URL`, `BE
 
 ## Scope and next work
 
-Registration is public and creates only the identity. Workspace creation is a separate flow. Email verification is not enabled in this iteration. The application has no offline identity or local database adapter yet; the authenticated empty state requires a reachable API to establish a session. Local durable work and synchronization remain separate architecture work.
+Registration is public and creates the identity. On first sign-in, the user creates a workspace; subsequent sign-ins open the most recently used active workspace. Workspace creation and activation require a reachable API. Email verification is not enabled in this iteration. The application has no offline identity or local database adapter yet; local durable work and synchronization remain separate architecture work.
 
 Run schema changes through Drizzle Kit (`npm run db:generate`) and review the generated migration before committing it. Apply committed migrations with `npm run db:migrate`; production startup does not create tables automatically.

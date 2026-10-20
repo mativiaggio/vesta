@@ -1,3 +1,4 @@
+# TO ALL AGENTS
 # Vesta — Agent Engineering Instructions
 
 > These instructions are mandatory for every AI coding agent and contributor working in this repository. They apply to all packages, applications, modules, migrations, tests, and scripts. If a task conflicts with them, explain the conflict and propose a compliant solution instead of silently bypassing a rule.

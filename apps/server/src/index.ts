@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import { auth, closeAuthDatabase } from './auth.js'
 import { serverConfig } from './config.js'
 import { requireSession, type AuthEnvironment } from './middleware/require-session.js'
+import { workspaceRoutes } from './workspaces/routes.js'
 
 const app = new Hono<AuthEnvironment>()
 
@@ -20,6 +21,8 @@ app.get('/api/me', requireSession, (context) => {
   const { user } = context.get('authSession')
   return context.json({ user: { id: user.id, name: user.name, email: user.email } })
 })
+
+app.route('/api/workspaces', workspaceRoutes)
 
 app.all('/api/auth/*', (context) => auth.handler(context.req.raw))
 

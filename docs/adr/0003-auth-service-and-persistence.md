@@ -14,7 +14,7 @@ Vesta needs the same email/password authentication flow in the browser and Tauri
 - Use PostgreSQL through Drizzle ORM and versioned Drizzle Kit migrations. The API does not connect to PostgreSQL from the client.
 - Use Resend behind a provider-neutral `EmailDelivery` contract. Cloud mode must configure Resend at startup. Self-hosted mode may opt into emitting a reset URL to its restricted server administration console; it is disabled by default.
 - Accept configured browser and Tauri origins, with credentialed CORS and Better Auth origin validation. No wildcard credential origins.
-- Public email/password registration creates a user only. Workspace creation remains a separate next iteration.
+- Public email/password registration creates an identity; the authenticated first-run flow then creates the user's first workspace.
 
 ## Consequences
 
