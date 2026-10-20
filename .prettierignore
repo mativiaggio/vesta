@@ -1,0 +1,8 @@
+dist
+node_modules
+AGENTS.md
+src-tauri/target
+src-tauri/gen
+packages/database/migrations/meta
+package-lock.json
+*.svg

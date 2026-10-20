@@ -29,14 +29,16 @@ export function DesktopTitlebar() {
     void appWindow.isMaximized().then((maximized) => {
       if (!disposed) setIsMaximized(maximized)
     })
-    void appWindow.onResized(() => {
-      void appWindow.isMaximized().then((maximized) => {
-        if (!disposed) setIsMaximized(maximized)
+    void appWindow
+      .onResized(() => {
+        void appWindow.isMaximized().then((maximized) => {
+          if (!disposed) setIsMaximized(maximized)
+        })
       })
-    }).then((stopListening) => {
-      if (disposed) stopListening()
-      else unlisten = stopListening
-    })
+      .then((stopListening) => {
+        if (disposed) stopListening()
+        else unlisten = stopListening
+      })
 
     return () => {
       disposed = true
@@ -118,33 +120,56 @@ export function DesktopTitlebar() {
       </div>
 
       <nav className="titlebar-navigation" aria-label={t('desktop', 'navigation')}>
-        <Button className="titlebar-action" variant="ghost" size="icon" type="button" aria-label={t('desktop', 'back')} title={t('desktop', 'back')} onClick={() => window.history.back()}>
+        <Button
+          className="titlebar-action"
+          variant="ghost"
+          size="icon"
+          type="button"
+          aria-label={t('desktop', 'back')}
+          title={t('desktop', 'back')}
+          onClick={() => window.history.back()}
+        >
           <ArrowLeft size={17} aria-hidden="true" />
         </Button>
-        <Button className="titlebar-action" variant="ghost" size="icon" type="button" aria-label={t('desktop', 'forward')} title={t('desktop', 'forward')} onClick={() => window.history.forward()}>
+        <Button
+          className="titlebar-action"
+          variant="ghost"
+          size="icon"
+          type="button"
+          aria-label={t('desktop', 'forward')}
+          title={t('desktop', 'forward')}
+          onClick={() => window.history.forward()}
+        >
           <ArrowRight size={17} aria-hidden="true" />
         </Button>
         <span className="titlebar-divider" aria-hidden="true" />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button className="titlebar-menu-trigger" variant="ghost" type="button">{t('desktop', 'view')}</Button>
+            <Button className="titlebar-menu-trigger" variant="ghost" type="button">
+              {t('desktop', 'view')}
+            </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             <DropdownMenuItem onSelect={() => window.history.back()}>
-              <span>{t('desktop', 'back')}</span><kbd>Alt ←</kbd>
+              <span>{t('desktop', 'back')}</span>
+              <kbd>Alt ←</kbd>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => window.history.forward()}>
-              <span>{t('desktop', 'forward')}</span><kbd>Alt →</kbd>
+              <span>{t('desktop', 'forward')}</span>
+              <kbd>Alt →</kbd>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={() => changeZoom(zoom + zoomStep)}>
-              <span>{t('desktop', 'zoomIn')}</span><kbd>Ctrl +</kbd>
+              <span>{t('desktop', 'zoomIn')}</span>
+              <kbd>Ctrl +</kbd>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => changeZoom(zoom - zoomStep)}>
-              <span>{t('desktop', 'zoomOut')}</span><kbd>Ctrl −</kbd>
+              <span>{t('desktop', 'zoomOut')}</span>
+              <kbd>Ctrl −</kbd>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => changeZoom(1)}>
-              <span>{t('desktop', 'actualSize')}</span><kbd>Ctrl 0</kbd>
+              <span>{t('desktop', 'actualSize')}</span>
+              <kbd>Ctrl 0</kbd>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -153,13 +178,43 @@ export function DesktopTitlebar() {
       <div className="titlebar-drag-space" />
 
       <div className="titlebar-window-controls">
-        <Button className="window-control" variant="ghost" size="icon" type="button" aria-label={t('desktop', 'minimize')} title={t('desktop', 'minimize')} onClick={() => { void getCurrentWindow().minimize() }}>
+        <Button
+          className="window-control"
+          variant="ghost"
+          size="icon"
+          type="button"
+          aria-label={t('desktop', 'minimize')}
+          title={t('desktop', 'minimize')}
+          onClick={() => {
+            void getCurrentWindow().minimize()
+          }}
+        >
           <Minus size={15} aria-hidden="true" />
         </Button>
-        <Button className="window-control" variant="ghost" size="icon" type="button" aria-label={isMaximized ? t('desktop', 'restore') : t('desktop', 'maximize')} title={isMaximized ? t('desktop', 'restore') : t('desktop', 'maximize')} onClick={() => { void getCurrentWindow().toggleMaximize() }}>
+        <Button
+          className="window-control"
+          variant="ghost"
+          size="icon"
+          type="button"
+          aria-label={isMaximized ? t('desktop', 'restore') : t('desktop', 'maximize')}
+          title={isMaximized ? t('desktop', 'restore') : t('desktop', 'maximize')}
+          onClick={() => {
+            void getCurrentWindow().toggleMaximize()
+          }}
+        >
           {isMaximized ? <Copy size={13} aria-hidden="true" /> : <Square size={13} aria-hidden="true" />}
         </Button>
-        <Button className="window-control window-close" variant="ghost" size="icon" type="button" aria-label={t('desktop', 'close')} title={t('desktop', 'close')} onClick={() => { void getCurrentWindow().close() }}>
+        <Button
+          className="window-control window-close"
+          variant="ghost"
+          size="icon"
+          type="button"
+          aria-label={t('desktop', 'close')}
+          title={t('desktop', 'close')}
+          onClick={() => {
+            void getCurrentWindow().close()
+          }}
+        >
           <X size={16} aria-hidden="true" />
         </Button>
       </div>

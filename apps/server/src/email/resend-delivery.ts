@@ -1,5 +1,6 @@
 import { Resend } from 'resend'
 import type { EmailDelivery, PasswordResetMessage } from './delivery.js'
+import { createPasswordResetContent } from './password-reset-content.js'
 
 export class ResendEmailDelivery implements EmailDelivery {
   private readonly client: Resend
@@ -11,27 +12,16 @@ export class ResendEmailDelivery implements EmailDelivery {
     this.client = new Resend(apiKey)
   }
 
-  async sendPasswordReset({ email, resetUrl }: PasswordResetMessage): Promise<void> {
+  async sendPasswordReset(message: PasswordResetMessage): Promise<void> {
+    const content = createPasswordResetContent(message)
     const { error } = await this.client.emails.send({
       from: this.from,
-      to: email,
-      subject: 'Reset your Vesta password',
-      text: `Use this one-time link to choose a new Vesta password. It expires soon.\n\n${resetUrl}`,
-      html: `<p>Use this one-time link to choose a new Vesta password. It expires soon.</p><p><a href="${escapeHtml(resetUrl)}">Reset password</a></p>`,
+      to: message.email,
+      ...content,
     })
 
     if (error) {
       throw new Error(`Password reset email delivery failed: ${error.message}`)
     }
   }
-}
-
-function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (character) => ({
-    '&': '&amp;',
-    '<': '&lt;',
-    '>': '&gt;',
-    '"': '&quot;',
-    "'": '&#39;',
-  })[character] ?? character)
 }

@@ -1,19 +1,18 @@
+import { readPreference, writePreference } from './preference-store'
+
 export type Theme = 'light' | 'dark'
 
 const storageKey = 'vesta.theme'
 
 export function readThemePreference(): Theme {
-  try {
-    return window.localStorage.getItem(storageKey) === 'dark' ? 'dark' : 'light'
-  } catch {
-    return 'light'
-  }
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-export function saveThemePreference(theme: Theme): void {
-  try {
-    window.localStorage.setItem(storageKey, theme)
-  } catch {
-    // Keep the selected theme for the current session if storage is unavailable.
-  }
+export async function loadThemePreference(): Promise<Theme> {
+  const value = await readPreference(storageKey)
+  return value === 'dark' || value === 'light' ? value : readThemePreference()
+}
+
+export function saveThemePreference(theme: Theme): Promise<void> {
+  return writePreference(storageKey, theme)
 }

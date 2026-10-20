@@ -19,6 +19,15 @@ export const auth = betterAuth({
   secret: serverConfig.authSecret,
   database: createAuthDatabaseAdapter,
   trustedOrigins: serverConfig.trustedOrigins,
+  rateLimit: {
+    enabled: true,
+    storage: 'database',
+    customRules: {
+      '/sign-in/email': { window: 60, max: 5 },
+      '/sign-up/email': { window: 60 * 60, max: 5 },
+      '/request-password-reset': { window: 5 * 60, max: 3 },
+    },
+  },
   user: { additionalFields: { deletedAt: hiddenDeletedAtField } },
   account: { additionalFields: { deletedAt: hiddenDeletedAtField } },
   emailAndPassword: {
@@ -27,12 +36,16 @@ export const auth = betterAuth({
     maxPasswordLength: 128,
     resetPasswordTokenExpiresIn: 60 * 60,
     revokeSessionsOnPasswordReset: true,
-    sendResetPassword: async ({ user, url }) => {
+    sendResetPassword: async ({ user, url }, request) => {
       if (!emailDelivery) {
-        throw new Error('Password recovery is not configured. Set up Resend or explicitly enable the self-hosted administrative console fallback.')
+        throw new Error(
+          'Password recovery is not configured. Set up Resend or explicitly enable the self-hosted administrative console fallback.',
+        )
       }
 
-      await emailDelivery.sendPasswordReset({ email: user.email, resetUrl: url })
+      const requestedLanguage = request?.headers.get('X-Vesta-Language')
+      const language = requestedLanguage === 'es' ? 'es' : 'en'
+      await emailDelivery.sendPasswordReset({ email: user.email, resetUrl: url, language })
     },
   },
   verification: {

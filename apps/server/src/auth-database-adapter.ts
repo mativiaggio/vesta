@@ -9,7 +9,43 @@ function withActiveRecord(where: Where[] | undefined): Where[] {
   return [...(where ?? []), activeRecord]
 }
 
-function withSoftDeletes(adapter: DBTransactionAdapter): DBTransactionAdapter {
+export function authModelUsesPhysicalDeletion(model: string): boolean {
+  return model === 'rateLimit'
+}
+
+type SingleDeleteAdapter = Pick<DBTransactionAdapter, 'delete' | 'update'>
+type BulkDeleteAdapter = Pick<DBTransactionAdapter, 'deleteMany' | 'updateMany'>
+
+export async function deleteAuthRecord(
+  adapter: SingleDeleteAdapter,
+  data: Parameters<DBTransactionAdapter['delete']>[0],
+  deletedAt = new Date(),
+): Promise<void> {
+  if (authModelUsesPhysicalDeletion(data.model)) {
+    await adapter.delete(data)
+    return
+  }
+  await adapter.update({
+    model: data.model,
+    where: withActiveRecord(data.where),
+    update: { deletedAt, updatedAt: deletedAt },
+  })
+}
+
+export function deleteManyAuthRecords(
+  adapter: BulkDeleteAdapter,
+  data: Parameters<DBTransactionAdapter['deleteMany']>[0],
+  deletedAt = new Date(),
+): Promise<number> {
+  if (authModelUsesPhysicalDeletion(data.model)) return adapter.deleteMany(data)
+  return adapter.updateMany({
+    model: data.model,
+    where: withActiveRecord(data.where),
+    update: { deletedAt, updatedAt: deletedAt },
+  })
+}
+
+export function withSoftDeletes(adapter: DBTransactionAdapter): DBTransactionAdapter {
   return {
     ...adapter,
     findOne: <T>(data: Parameters<DBTransactionAdapter['findOne']>[0]) =>
@@ -22,19 +58,10 @@ function withSoftDeletes(adapter: DBTransactionAdapter): DBTransactionAdapter {
       adapter.update<T>({ ...data, where: withActiveRecord(data.where) }),
     updateMany: (data: Parameters<DBTransactionAdapter['updateMany']>[0]) =>
       adapter.updateMany({ ...data, where: withActiveRecord(data.where) }),
-    delete: async (data: Parameters<DBTransactionAdapter['delete']>[0]) => {
-      await adapter.update({
-        model: data.model,
-        where: withActiveRecord(data.where),
-        update: { deletedAt: new Date(), updatedAt: new Date() },
-      })
-    },
-    deleteMany: (data: Parameters<DBTransactionAdapter['deleteMany']>[0]) =>
-      adapter.updateMany({
-        model: data.model,
-        where: withActiveRecord(data.where),
-        update: { deletedAt: new Date(), updatedAt: new Date() },
-      }),
+    incrementOne: <T>(data: Parameters<DBTransactionAdapter['incrementOne']>[0]) =>
+      adapter.incrementOne<T>({ ...data, where: withActiveRecord(data.where) }),
+    delete: (data: Parameters<DBTransactionAdapter['delete']>[0]) => deleteAuthRecord(adapter, data),
+    deleteMany: (data: Parameters<DBTransactionAdapter['deleteMany']>[0]) => deleteManyAuthRecords(adapter, data),
     consumeOne: async <T>(data: Parameters<DBTransactionAdapter['consumeOne']>[0]) => {
       const [row] = await adapter.findMany<T>({ ...data, where: withActiveRecord(data.where), limit: 1 })
       if (!row || typeof row !== 'object' || !('id' in row) || typeof row.id !== 'string') return null

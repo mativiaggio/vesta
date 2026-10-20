@@ -14,8 +14,12 @@ export function LanguageSelector() {
         <SelectValue />
       </SelectTrigger>
       <SelectContent className="language-selector-content" align="end" sideOffset={6}>
-        <SelectItem className="language-selector-option" value="en">{t('language', 'english')}</SelectItem>
-        <SelectItem className="language-selector-option" value="es">{t('language', 'spanish')}</SelectItem>
+        <SelectItem className="language-selector-option" value="en">
+          {t('language', 'english')}
+        </SelectItem>
+        <SelectItem className="language-selector-option" value="es">
+          {t('language', 'spanish')}
+        </SelectItem>
       </SelectContent>
     </Select>
   )

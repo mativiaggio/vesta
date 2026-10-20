@@ -4,8 +4,23 @@ import { isTauri } from '@tauri-apps/api/core'
 import App from './App.tsx'
 import { DesktopTitlebar } from './features/desktop/components/desktop-titlebar'
 import { LanguageProvider } from './features/localization/language-context'
-import '@fontsource-variable/manrope'
 import './styles.css'
+
+if (!isTauri() && 'serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    void navigator.serviceWorker.register('/sw.js').then(async () => {
+      const registration = await navigator.serviceWorker.ready
+      const resourceUrls = performance
+        .getEntriesByType('resource')
+        .map((entry) => entry.name)
+        .filter((url) => {
+          const parsed = new URL(url)
+          return parsed.origin === window.location.origin && !parsed.pathname.startsWith('/api/')
+        })
+      registration.active?.postMessage({ type: 'CACHE_URLS', urls: ['/', ...resourceUrls] })
+    })
+  })
+}
 
 function AppRoot() {
   if (!isTauri()) return <App />
@@ -13,7 +28,9 @@ function AppRoot() {
   return (
     <div className="desktop-app-frame" onContextMenu={(event) => event.preventDefault()}>
       <DesktopTitlebar />
-      <div className="desktop-app-content"><App /></div>
+      <div className="desktop-app-content">
+        <App />
+      </div>
     </div>
   )
 }

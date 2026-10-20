@@ -10,7 +10,8 @@ Vesta is a focused digital office for independent professionals. The initial sha
 - Start the desktop app, API, and web UI together: `npm run tauri dev`
 - For web-only development, start the API with `npm run dev:server` and the web UI with `npm run dev` in separate terminals.
 - Create the web build: `npm run build`
-- Type-check the API: `npm run build:server`
+- Run the complete formatting, lint, type, test, build, performance, and Rust checks: `npm run check`
+- Type-check the API only: `npm run build:server`
 - Build the desktop app: `npm run tauri -- build`
 
 In desktop development, API logs share the terminal running `npm run tauri dev`. With the self-hosted console recovery fallback enabled, password reset URLs appear there under `[ADMIN ONLY]`.
@@ -19,6 +20,6 @@ In desktop development, API logs share the terminal running `npm run tauri dev`.
 
 Email/password sign up, sign in, sign out, session lookup, and password reset use Better Auth. The server is Hono on Node.js and PostgreSQL persistence uses Drizzle migrations. See [authentication setup](docs/authentication.md) for self-hosted and cloud configuration.
 
-After registration, users create their first workspace. Each workspace has a name, an accent color, and an identifying icon; returning users open the last workspace they used. Workspace selection and creation are handled by the authenticated server API and PostgreSQL. The workspace screen remains an early product surface while task, document, and client features are built.
+After registration, users create their first workspace. Each workspace has a name, an accent color, and an identifying icon; returning users open the last workspace they used. Workspace creation and selection commit to an account-scoped IndexedDB replica first, enter an idempotent mutation queue, and synchronize with the authenticated PostgreSQL API when connectivity returns. The web shell caches visited application assets without caching API responses; Tauri loads the packaged shell directly. The workspace screen remains an early product surface while task, document, and client features are built.
 
-The selected web tooling is documented in [ADR 0001](docs/adr/0001-web-ui-tooling.md); desktop shell choices are in [ADR 0002](docs/adr/0002-desktop-shell.md).
+The selected web tooling is documented in [ADR 0001](docs/adr/0001-web-ui-tooling.md); desktop shell choices are in [ADR 0002](docs/adr/0002-desktop-shell.md), and the local replica/sync contract is in [ADR 0005](docs/adr/0005-workspace-offline-replica-and-sync.md).

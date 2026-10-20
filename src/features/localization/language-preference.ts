@@ -1,22 +1,17 @@
 import type { Language } from './translations'
+import { readPreference, writePreference } from '../preferences/preference-store'
 
 const storageKey = 'vesta.language'
 
 export function readLanguagePreference(): Language {
-  try {
-    const savedLanguage = window.localStorage.getItem(storageKey)
-    if (savedLanguage === 'en' || savedLanguage === 'es') return savedLanguage
-  } catch {
-    // Fall back to the browser language when storage is unavailable.
-  }
-
   return navigator.language.toLowerCase().startsWith('es') ? 'es' : 'en'
 }
 
-export function saveLanguagePreference(language: Language): void {
-  try {
-    window.localStorage.setItem(storageKey, language)
-  } catch {
-    // Keep the selected language for the current session if storage is unavailable.
-  }
+export async function loadLanguagePreference(): Promise<Language> {
+  const value = await readPreference(storageKey)
+  return value === 'en' || value === 'es' ? value : readLanguagePreference()
+}
+
+export function saveLanguagePreference(language: Language): Promise<void> {
+  return writePreference(storageKey, language)
 }

@@ -12,12 +12,12 @@ After authentication, each user needs a durable workspace to begin working. Acco
 - Store workspace identity in PostgreSQL `workspace` rows with a validated name, accent token, icon token, and shared lifecycle timestamps.
 - Represent ownership and future membership through `workspace_membership`; scope every list and activation query to the authenticated user ID obtained from Better Auth.
 - Store `last_accessed_at` on the membership so resumption remains per user if a workspace is later shared.
-- Create the workspace and its owner membership in one database transaction. The creation time is also its first access time.
+- Create the workspace, owner membership, and idempotency receipt in one database transaction. The creation time is also its first access time; the client supplies stable entity and mutation UUIDs validated by the API.
 - Validate icon and accent tokens in the shared API contract and with database check constraints. The UI owns their locale-specific labels and color values.
 - Use a stable paginated workspace list. Keep active membership rows unique and soft-deleted memberships out of ordinary lookups.
 
 ## Consequences
 
 - The first authenticated visit opens a localized workspace creation form; later visits open the most recently activated workspace.
-- Creating and switching workspaces require a reachable server. Offline durable storage and synchronization need a separate design and are not implied by this feature.
+- Offline durability and synchronization are defined separately by [ADR 0005](0005-workspace-offline-replica-and-sync.md); PostgreSQL remains authoritative after synchronization.
 - A workspace membership is the authorization boundary for this feature. Future member invitations and role rules must extend this boundary without accepting ownership from a client.
