@@ -3,39 +3,75 @@ import { ArrowRight, Eye, EyeOff, LoaderCircle, LogOut, Moon, Sun } from 'lucide
 import { Button } from './components/ui/button'
 import { Input } from './components/ui/input'
 import { authClient } from './features/auth/data/auth-client'
+import { LanguageSelector } from './features/localization/components/language-selector'
+import { useLanguage } from './features/localization/language-context'
+import { translations } from './features/localization/translations'
 import { readThemePreference, saveThemePreference, type Theme } from './features/preferences/theme-preference'
 
 type AuthMode = 'signup' | 'signin' | 'recovery'
+type FeedbackKey = keyof typeof translations.en.feedback
+
+function isAuthMode(value: unknown): value is AuthMode {
+  return value === 'signup' || value === 'signin' || value === 'recovery'
+}
 
 export default function App() {
   const { data: session, isPending: isSessionPending } = authClient.useSession()
+  const { t } = useLanguage()
   const resetQuery = new URLSearchParams(window.location.search)
   const resetToken = resetQuery.get('token')
   const invalidResetLink = resetQuery.get('error') === 'INVALID_TOKEN'
-  const [mode, setMode] = useState<AuthMode>(invalidResetLink ? 'signin' : 'signup')
+  const [mode, setMode] = useState<AuthMode>('signin')
   const [theme, setTheme] = useState<Theme>(readThemePreference)
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState(invalidResetLink ? 'This password reset link has expired or was already used. Request a new one.' : '')
+  const [message, setMessage] = useState<FeedbackKey | null>(null)
+  const [error, setError] = useState<FeedbackKey | null>(invalidResetLink ? 'invalidReset' : null)
 
   useEffect(() => {
     saveThemePreference(theme)
   }, [theme])
 
-  if (isSessionPending) return <main className="session-loading" aria-label="Opening Vesta" />
+  useEffect(() => {
+    function handleHistoryNavigation(event: PopStateEvent) {
+      const state: unknown = event.state
+      if (typeof state === 'object' && state !== null && 'vestaAuthMode' in state && isAuthMode(state.vestaAuthMode)) {
+        setMode(state.vestaAuthMode)
+      } else {
+        setMode('signin')
+      }
+      setError(null)
+      setMessage(null)
+    }
+
+    window.addEventListener('popstate', handleHistoryNavigation)
+    return () => window.removeEventListener('popstate', handleHistoryNavigation)
+  }, [])
+
+  if (isSessionPending) return <main className="session-loading" aria-label={t('app', 'opening')} />
 
   if (session?.user) {
     return (
       <main className="office-ready">
+        <div className="office-controls">
+          <LanguageSelector />
+          <Button
+            className="office-signout"
+            variant="ghost"
+            size="icon"
+            type="button"
+            aria-label={t('app', 'signOut')}
+            title={t('app', 'signOut')}
+            onClick={() => { void authClient.signOut() }}
+          >
+            <LogOut size={17} aria-hidden="true" />
+          </Button>
+        </div>
         <div className="office-ready-content">
           <img className="office-ready-logo" src="/brand/logo-vesta.svg" alt="Vesta" />
-          <h1>A little more room.</h1>
-          <p>Your office is ready. Start with what’s on your mind.</p>
+          <h1>{t('office', 'heading')}</h1>
+          <p>{t('office', 'description')}</p>
         </div>
-        <Button className="signout-button" variant="ghost" size="icon" type="button" aria-label="Sign out" title="Sign out" onClick={() => { void authClient.signOut() }}>
-          <LogOut size={17} aria-hidden="true" />
-        </Button>
       </main>
     )
   }
@@ -46,8 +82,8 @@ export default function App() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setError('')
-    setMessage('')
+    setError(null)
+    setMessage(null)
     setIsSubmitting(true)
 
     const formData = new FormData(event.currentTarget)
@@ -57,84 +93,105 @@ export default function App() {
 
     try {
       if ((isSignup || isReset) && password !== confirmPassword) {
-        throw new Error('The passwords do not match.')
+        setError('passwordMismatch')
+        return
       }
 
       if (isReset && resetToken) {
         const result = await authClient.resetPassword({ newPassword: password, token: resetToken })
-        if (result.error) throw new Error(result.error.message || 'Could not reset your password.')
+        if (result.error) {
+          setError('resetFailed')
+          return
+        }
         window.history.replaceState({}, '', window.location.pathname)
-        setMessage('Your password has been changed. Sign in with your new password.')
+        setMessage('passwordChanged')
         setMode('signin')
         return
       }
 
       if (isRecovery) {
         const result = await authClient.requestPasswordReset({ email, redirectTo: `${window.location.origin}/` })
-        if (result.error) throw new Error(result.error.message || 'Could not request password recovery.')
-        setMessage('If the account exists, check its configured recovery destination. Self-hosted console links appear only in the server administrator’s console.')
+        if (result.error) {
+          setError('recoveryFailed')
+          return
+        }
+        setMessage('recoveryRequested')
         return
       }
 
       if (isSignup) {
         const name = String(formData.get('name') ?? '').trim()
         const result = await authClient.signUp.email({ email, password, name })
-        if (result.error) throw new Error(result.error.message || 'Could not create your account.')
+        if (result.error) {
+          setError('signupFailed')
+          return
+        }
       } else {
         const result = await authClient.signIn.email({ email, password })
-        if (result.error) throw new Error(result.error.message || 'Email or password is incorrect.')
+        if (result.error) {
+          setError('signinFailed')
+          return
+        }
       }
-    } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Something went wrong. Please try again.')
+    } catch {
+      setError('genericError')
     } finally {
       setIsSubmitting(false)
     }
   }
 
   function switchMode(nextMode: AuthMode) {
-    window.history.replaceState({}, '', window.location.pathname)
+    window.history.pushState({ vestaAuthMode: nextMode }, '', window.location.pathname)
     setMode(nextMode)
-    setMessage('')
-    setError('')
+    setMessage(null)
+    setError(null)
     setShowPassword(false)
   }
 
-  const heading = isReset ? 'Choose a new password' : isRecovery ? 'Reset your password' : isSignup ? 'Create your account' : 'Welcome back'
-  const subheading = isReset
-    ? 'Use at least 10 characters.'
+  const heading = isReset
+    ? t('auth', 'choosePassword')
     : isRecovery
-      ? 'Request a one-time link to reset your password.'
+      ? t('auth', 'resetPassword')
       : isSignup
-        ? 'Start with the essentials. You can make it yours later.'
-        : 'Pick up where you left off.'
+        ? t('auth', 'createAccount')
+        : t('auth', 'welcomeBack')
+  const subheading = isReset
+    ? t('auth', 'passwordLength')
+    : isRecovery
+      ? t('auth', 'recoveryDescription')
+      : isSignup
+        ? t('auth', 'signupDescription')
+        : t('auth', 'signinDescription')
 
   return (
     <main className={`auth-shell theme-${theme}`}>
-      <section className="brand-panel" aria-label="About Vesta">
-        <a className="brand-lockup" href="#home" aria-label="Vesta home">
+      <section className="brand-panel" aria-label={t('app', 'about')}>
+        <a className="brand-lockup" href="#home" aria-label={t('app', 'home')}>
           <img className="brand-logo" src="/brand/logo-vesta.svg" alt="" />
           <span>Vesta</span>
         </a>
         <div className="brand-story">
-          <div className="brand-mark" aria-hidden="true">V</div>
-          <h1>Make room for<br /><span>your best work.</span></h1>
-          <p>A quiet place for the work that matters.<br />Tasks, documents, and clients. All in one office.</p>
-          <div className="brand-note"><span aria-hidden="true" />Made for independent work</div>
+          <h1>{t('brand', 'headingFirst')}<br /><span>{t('brand', 'headingSecond')}</span></h1>
+          <p>{t('brand', 'descriptionFirst')}<br />{t('brand', 'descriptionSecond')}</p>
+          <div className="brand-note"><span aria-hidden="true" />{t('brand', 'note')}</div>
         </div>
-        <footer className="brand-footer">Vesta <span>·</span> Your work, in good order.</footer>
+        <footer className="brand-footer">Vesta <span>·</span> {t('brand', 'footer')}</footer>
       </section>
 
       <section className="form-panel" aria-labelledby="form-title">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="theme-toggle"
-          aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
-          onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-          type="button"
-        >
-          {theme === 'light' ? <Moon size={18} /> : <Sun size={18} />}
-        </Button>
+        <div className="auth-controls">
+          <LanguageSelector />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="theme-toggle"
+            aria-label={theme === 'light' ? t('app', 'switchToDark') : t('app', 'switchToLight')}
+            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+            type="button"
+          >
+            {theme === 'light' ? <Moon size={18} aria-hidden="true" /> : <Sun size={18} aria-hidden="true" />}
+          </Button>
+        </div>
         <div className="form-content">
           <header className="form-heading">
             <h2 id="form-title">{heading}</h2>
@@ -143,24 +200,24 @@ export default function App() {
           <form className="auth-form" onSubmit={(event) => { void handleSubmit(event) }}>
             {isSignup && !isReset && (
               <div className="field-group">
-                <label htmlFor="name">Your name</label>
-                <Input id="name" name="name" autoComplete="name" placeholder="Alex Morgan" required />
+                <label htmlFor="name">{t('auth', 'name')}</label>
+                <Input id="name" name="name" autoComplete="name" placeholder={t('auth', 'namePlaceholder')} required />
               </div>
             )}
             {!isReset && <div className="field-group">
-              <label htmlFor="email">Email address</label>
+              <label htmlFor="email">{t('auth', 'email')}</label>
               <Input id="email" name="email" type="email" autoComplete="email" placeholder="you@example.com" required />
             </div>}
             {!isRecovery && (
               <div className="field-group">
-                <label htmlFor="password">{isReset ? 'New password' : 'Password'}</label>
+                <label htmlFor="password">{isReset ? t('auth', 'newPassword') : t('auth', 'password')}</label>
                 <div className="password-field">
                   <Input
                     id="password"
                     name="password"
                     type={showPassword ? 'text' : 'password'}
                     autoComplete={isReset || isSignup ? 'new-password' : 'current-password'}
-                    placeholder={isSignup || isReset ? 'At least 10 characters' : 'Enter your password'}
+                    placeholder={isSignup || isReset ? t('auth', 'passwordPlaceholder') : t('auth', 'enterPassword')}
                     minLength={isSignup || isReset ? 10 : undefined}
                     maxLength={128}
                     required
@@ -170,44 +227,44 @@ export default function App() {
                     variant="ghost"
                     size="icon"
                     type="button"
-                    aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    aria-label={showPassword ? t('auth', 'hidePassword') : t('auth', 'showPassword')}
                     onClick={() => setShowPassword(!showPassword)}
                   >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                    {showPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
                   </Button>
                 </div>
               </div>
             )}
             {(isSignup || isReset) && (
               <div className="field-group">
-                <label htmlFor="confirm-password">Confirm password</label>
+                <label htmlFor="confirm-password">{t('auth', 'confirmPassword')}</label>
                 <Input
                   id="confirm-password"
                   name="confirmPassword"
                   type="password"
                   autoComplete="new-password"
-                  placeholder="Enter it once more"
+                  placeholder={t('auth', 'confirmPasswordPlaceholder')}
                   minLength={10}
                   maxLength={128}
                   required
                 />
               </div>
             )}
-            {mode === 'signin' && !isReset && <button className="forgot-link" type="button" onClick={() => switchMode('recovery')}>Forgot password?</button>}
-            {error && <p className="form-message form-error" role="alert">{error}</p>}
-            {message && <p className="form-message" role="status">{message}</p>}
+            {mode === 'signin' && !isReset && <button className="forgot-link" type="button" onClick={() => switchMode('recovery')}>{t('auth', 'forgotPassword')}</button>}
+            {error && <p className="form-message form-error" role="alert">{t('feedback', error)}</p>}
+            {message && <p className="form-message" role="status">{t('feedback', message)}</p>}
             <Button type="submit" className="submit-button" disabled={isSubmitting}>
-              <span>{isSubmitting ? 'Please wait…' : isReset ? 'Save new password' : isRecovery ? 'Send reset link' : isSignup ? 'Create account' : 'Sign in'}</span>
-              {isSubmitting ? <LoaderCircle className="loading-icon" size={18} aria-hidden="true" /> : <ArrowRight size={19} aria-hidden="true" />}
+              <span>{isSubmitting ? t('auth', 'pleaseWait') : isReset ? t('auth', 'savePassword') : isRecovery ? t('auth', 'sendResetLink') : isSignup ? t('auth', 'createAccountAction') : t('auth', 'signIn')}</span>
+              {isSubmitting ? <LoaderCircle className="loading-icon" size={16} aria-hidden="true" /> : <ArrowRight size={17} aria-hidden="true" />}
             </Button>
           </form>
           <p className="mode-switch">
-            {isRecovery || isReset ? 'Remember your password?' : isSignup ? 'Already have an account?' : 'New to Vesta?'}{' '}
+            {isRecovery || isReset ? t('auth', 'rememberPassword') : isSignup ? t('auth', 'alreadyHaveAccount') : t('auth', 'newToVesta')}{' '}
             <button type="button" onClick={() => switchMode(isSignup || isRecovery || isReset ? 'signin' : 'signup')}>
-              {isSignup || isRecovery || isReset ? 'Sign in' : 'Create an account'}
+              {isSignup || isRecovery || isReset ? t('auth', 'signIn') : t('auth', 'createAccountLink')}
             </button>
           </p>
-          <p className="privacy-note"><span aria-hidden="true" />Your workspace is yours. No feeds, no noise.</p>
+          <p className="privacy-note"><span aria-hidden="true" />{t('auth', 'privacyNote')}</p>
         </div>
       </section>
     </main>

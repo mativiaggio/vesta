@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "Vesta",
+        "decorations": false,
         "width": 1120,
         "height": 760,
         "minWidth": 760,
@@ -22,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self' asset:; connect-src ipc: http://ipc.localhost; font-src 'self' data:; img-src 'self' asset: http://asset.localhost data:; script-src 'self'; style-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'",
+      "csp": "default-src 'self' asset:; connect-src ipc: http://ipc.localhost; font-src 'self' data:; img-src 'self' asset: http://asset.localhost data:; script-src 'self'; style-src 'self'; style-src-attr 'unsafe-inline'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'",
       "devCsp": "default-src 'self' asset:; connect-src ipc: http://ipc.localhost http://localhost:5173 ws://localhost:5173; font-src 'self' data:; img-src 'self' asset: http://asset.localhost data:; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
     }
   },
