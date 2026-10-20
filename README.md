@@ -7,12 +7,13 @@ Vesta is a focused digital office for independent professionals. The initial sha
 - Install dependencies: `npm install`
 - Copy `.env.example` to `.env`, set a 32+ character `BETTER_AUTH_SECRET`, and point `DATABASE_URL` at PostgreSQL.
 - Apply the reviewed database migration: `npm run db:migrate`
-- Start the API in one terminal: `npm run dev:server`
-- Start the web UI in another terminal: `npm run dev`
-- Start the Tauri desktop shell: `npm run tauri -- dev`
+- Start the desktop app, API, and web UI together: `npm run tauri dev`
+- For web-only development, start the API with `npm run dev:server` and the web UI with `npm run dev` in separate terminals.
 - Create the web build: `npm run build`
 - Type-check the API: `npm run build:server`
 - Build the desktop app: `npm run tauri -- build`
+
+In desktop development, API logs share the terminal running `npm run tauri dev`. With the self-hosted console recovery fallback enabled, password reset URLs appear there under `[ADMIN ONLY]`.
 
 ## Project status
 

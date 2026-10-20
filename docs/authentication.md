@@ -9,7 +9,7 @@ The shared Better Auth adapter soft-deletes identity, session, account, and veri
 1. Copy `.env.example` to `.env`.
 2. Set `DATABASE_URL`, generate a unique `BETTER_AUTH_SECRET` with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`, and set `BETTER_AUTH_URL` to the API's public URL.
 3. Set `AUTH_TRUSTED_ORIGINS` to the exact web and desktop origins. The defaults cover Vite on `localhost:5173` and Tauri's Windows and macOS/Linux development origins. Add the packaged app origin if it differs.
-4. Run `npm run db:migrate`, then `npm run dev:server` and `npm run dev` in separate terminals.
+4. Run `npm run db:migrate`. For desktop development, `npm run tauri dev` starts the API and Vite together; API logs, including explicitly enabled administrative recovery URLs, appear in that terminal. For web-only development, run `npm run dev:server` and `npm run dev` in separate terminals.
 5. For recovery, configure Resend or explicitly set `ENABLE_CONSOLE_PASSWORD_RESET=true` on a trusted self-hosted instance.
 
 The console fallback writes the one-time recovery URL to the server process's **administrative stderr console**. Enable it only where access to that console is restricted. Do not forward this output to general application logs, browser logs, shared build logs, or external telemetry. Reset URLs expire after one hour and are single-use; Better Auth stores the reset identifier hashed, and a successful reset revokes existing sessions. If no delivery path is configured, the request fails rather than claiming delivery.
