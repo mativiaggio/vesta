@@ -129,8 +129,9 @@ export default function App() {
       <Suspense fallback={loading}>
         <WorkspaceExperience
           userId={user.id}
+          userName={user.name}
+          userEmail={user.email}
           theme={theme}
-          onToggleTheme={toggleTheme}
           onSignOut={() => {
             setCachedIdentity(null)
             setIsLocallySignedOut(true)

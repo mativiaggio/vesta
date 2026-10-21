@@ -1,8 +1,9 @@
 import { useEffect, useState, type MouseEvent } from 'react'
 import { getCurrentWindow } from '@tauri-apps/api/window'
 import { getCurrentWebview } from '@tauri-apps/api/webview'
-import { ArrowLeft, ArrowRight, Copy, Minus, Square, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Copy, Minus, PanelLeft, Square, X } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
+import { requestSidebarToggle } from '../../../components/ui/sidebar-context'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -120,6 +121,17 @@ export function DesktopTitlebar() {
       </div>
 
       <nav className="titlebar-navigation" aria-label={t('desktop', 'navigation')}>
+        <Button
+          className="titlebar-action desktop-sidebar-toggle"
+          variant="ghost"
+          size="icon"
+          type="button"
+          aria-label={t('navigation', 'toggleSidebar')}
+          title={t('navigation', 'toggleSidebar')}
+          onClick={requestSidebarToggle}
+        >
+          <PanelLeft size={17} aria-hidden="true" />
+        </Button>
         <Button
           className="titlebar-action"
           variant="ghost"

@@ -11,6 +11,12 @@ const english = {
     switchToDark: 'Switch to dark mode',
     switchToLight: 'Switch to light mode',
   },
+  navigation: {
+    primary: 'Primary navigation',
+    overview: 'Overview',
+    settings: 'Settings',
+    toggleSidebar: 'Toggle sidebar',
+  },
   language: {
     label: 'Language',
     english: 'English',
@@ -145,6 +151,12 @@ const spanish: LocaleDictionary<typeof english> = {
     signOut: 'Cerrar sesión',
     switchToDark: 'Cambiar al modo oscuro',
     switchToLight: 'Cambiar al modo claro',
+  },
+  navigation: {
+    primary: 'Navegación principal',
+    overview: 'Resumen',
+    settings: 'Configuración',
+    toggleSidebar: 'Mostrar u ocultar la barra lateral',
   },
   language: {
     label: 'Idioma',

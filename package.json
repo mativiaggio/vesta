@@ -25,6 +25,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@base-ui/react": "^1.9.0",
     "@better-auth/drizzle-adapter": "^1.7.12",
     "@fontsource-variable/manrope": "^5.3.0",
     "@hono/node-server": "^2.1.5",
@@ -47,13 +48,13 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.1.14",
     "@tauri-apps/cli": "^2.12.3",
     "@types/pg": "^8.23.1",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
     "@vitejs/plugin-react": "^5.0.4",
-    "@eslint/js": "^10.0.1",
     "concurrently": "^10.0.6",
     "drizzle-kit": "^0.31.11",
     "eslint": "^10.13.0",
@@ -66,8 +67,8 @@
     "tsx": "^4.23.15",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.72.0",
-    "vitest": "^5.0.5",
-    "vite": "^7.1.9"
+    "vite": "^7.1.9",
+    "vitest": "^5.0.5"
   },
   "overrides": {
     "esbuild": "^0.28.2"

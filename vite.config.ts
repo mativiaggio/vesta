@@ -43,7 +43,7 @@ export default defineConfig(({ mode }) => {
             )
               return 'vendor-react'
             if (id.includes('/zod/')) return 'vendor-validation'
-            if (id.includes('@radix-ui')) return 'vendor-ui'
+            if (id.includes('@radix-ui') || id.includes('@base-ui/react')) return 'vendor-ui'
             if (id.includes('lucide-react')) return 'vendor-icons'
             return undefined
           },
