@@ -7,6 +7,7 @@ import { startSyncReceiptRetention } from './maintenance/sync-receipt-retention.
 import { requireSession, type AuthEnvironment } from './middleware/require-session.js'
 import { PostgresMutationRateLimiter } from './rate-limit/postgres-mutation-rate-limiter.js'
 import { createWorkspaceRoutes } from './workspaces/routes.js'
+import { createClientRoutes } from './clients/routes.js'
 
 const app = new Hono<AuthEnvironment>()
 
@@ -17,7 +18,7 @@ app.use(
   cors({
     origin: serverConfig.trustedOrigins,
     credentials: true,
-    allowMethods: ['GET', 'POST', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Content-Type', 'Authorization', 'X-Vesta-Language'],
   }),
 )
@@ -28,6 +29,7 @@ app.get('/api/me', requireSession, (context) => {
 })
 
 app.route('/api/workspaces', createWorkspaceRoutes(new PostgresMutationRateLimiter()))
+app.route('/api/workspaces/:workspaceId/clients', createClientRoutes(new PostgresMutationRateLimiter()))
 
 app.all('/api/auth/*', (context) => auth.handler(context.req.raw))
 

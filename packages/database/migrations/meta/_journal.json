@@ -43,6 +43,13 @@
       "when": 1792594066181,
       "tag": "0005_funny_karnak",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792608814949,
+      "tag": "0006_blushing_the_stranger",
+      "breakpoints": true
     }
   ]
 }

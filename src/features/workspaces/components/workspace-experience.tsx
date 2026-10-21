@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type FormEvent } from 'react'
+import { lazy, Suspense, useState, type CSSProperties, type FormEvent } from 'react'
 import { ArrowLeft, LoaderCircle, Plus, RotateCw } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
@@ -17,6 +17,10 @@ import {
   type WorkspaceAccent,
   type WorkspaceIcon,
 } from '../../../../packages/workspaces/src/contract'
+
+const ClientsExperience = lazy(() =>
+  import('../../clients/components/clients-experience').then((module) => ({ default: module.ClientsExperience })),
+)
 
 type WorkspaceExperienceProps = {
   userId: string
@@ -57,6 +61,7 @@ export function WorkspaceExperience({
     retry,
   } = useWorkspaceState(userId, storageMode)
   const [isCreating, setIsCreating] = useState(false)
+  const [activeView, setActiveView] = useState<'overview' | 'clients'>('clients')
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null)
   const [name, setName] = useState('')
@@ -70,7 +75,10 @@ export function WorkspaceExperience({
   const isFirstWorkspace = showCreateForm && workspaces.length === 0
 
   async function activateWorkspace(workspaceId: string) {
-    if (await activate(workspaceId)) setIsCreating(false)
+    if (await activate(workspaceId)) {
+      setIsCreating(false)
+      setActiveView('clients')
+    }
   }
 
   function startCreating() {
@@ -118,7 +126,15 @@ export function WorkspaceExperience({
             void loadMore()
           }}
           onCreateWorkspace={startCreating}
-          onNavigateOverview={() => setIsCreating(false)}
+          activeView={activeView}
+          onNavigateOverview={() => {
+            setIsCreating(false)
+            setActiveView('overview')
+          }}
+          onNavigateClients={() => {
+            setIsCreating(false)
+            setActiveView('clients')
+          }}
           onSignOut={onSignOut}
         />
       )}
@@ -228,6 +244,22 @@ export function WorkspaceExperience({
               </Button>
             </form>
           </section>
+        ) : activeWorkspace && activeView === 'clients' ? (
+          <Suspense
+            fallback={
+              <div className="workspace-loading" role="status">
+                <span />
+                <span />
+              </div>
+            }
+          >
+            <ClientsExperience
+              userId={userId}
+              workspaceId={activeWorkspace.id}
+              storageMode={storageMode}
+              theme={theme}
+            />
+          </Suspense>
         ) : activeWorkspace ? (
           <section
             className="workspace-home"

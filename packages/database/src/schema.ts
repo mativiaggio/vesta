@@ -129,6 +129,40 @@ export const workspaceMembership = pgTable(
   ],
 )
 
+export const client = pgTable(
+  'client',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspace.id),
+    code: text('code').notNull(),
+    name: text('name').notNull(),
+    active: boolean('active').notNull().default(true),
+    version: integer('version').notNull().default(1),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    updatedByUserId: text('updated_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    deletedByUserId: text('deleted_by_user_id').references(() => user.id),
+    ...timestamps,
+  },
+  (table) => [
+    check('client_code_length_check', sql`length(trim(${table.code})) BETWEEN 1 AND 64`),
+    check('client_name_length_check', sql`length(trim(${table.name})) BETWEEN 1 AND 120`),
+    check('client_version_check', sql`${table.version} > 0`),
+    uniqueIndex('client_workspace_code_active_unique')
+      .on(table.workspaceId, sql`lower(${table.code} COLLATE "C")`)
+      .where(sql`${table.deletedAt} IS NULL`),
+    index('client_workspace_created_active_idx')
+      .on(table.workspaceId, table.createdAt, table.id)
+      .where(sql`${table.deletedAt} IS NULL`),
+    index('client_workspace_updated_idx').on(table.workspaceId, table.updatedAt, table.id),
+  ],
+)
+
 export const rateLimit = pgTable(
   'rate_limit',
   {
@@ -182,7 +216,7 @@ export const syncMutationReceipt = pgTable(
   (table) => [
     check(
       'sync_mutation_receipt_kind_check',
-      sql`${table.kind} IN ('workspace.create', 'workspace.update', 'workspace.activate', 'workspace.delete')`,
+      sql`${table.kind} IN ('workspace.create', 'workspace.update', 'workspace.activate', 'workspace.delete', 'client.create', 'client.update', 'client.delete')`,
     ),
     uniqueIndex('sync_mutation_receipt_user_mutation_active_unique')
       .on(table.userId, table.mutationId)
@@ -203,5 +237,6 @@ export const authSchema = {
   workspaceMutationRateLimit,
   workspace,
   workspaceMembership,
+  client,
   syncMutationReceipt,
 }

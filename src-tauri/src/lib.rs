@@ -159,7 +159,11 @@ pub fn run() {
             local_database::create_local_workspace,
             local_database::update_local_workspace,
             local_database::delete_local_workspace,
-            local_database::activate_local_workspace
+            local_database::activate_local_workspace,
+            local_database::get_local_clients,
+            local_database::create_local_client,
+            local_database::update_local_client,
+            local_database::delete_local_client,
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");

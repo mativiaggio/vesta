@@ -1,3 +1,4 @@
+mod clients;
 mod preferences;
 mod workspaces;
 
@@ -8,7 +9,47 @@ use std::time::Duration;
 use tauri::AppHandle;
 
 const DATABASE_FILE_NAME: &str = "vesta.sqlite3";
-const DATABASE_VERSION: i64 = 1;
+const DATABASE_VERSION: i64 = 2;
+
+#[tauri::command]
+pub fn get_local_clients(
+    app: AppHandle,
+    workspace_id: String,
+    cursor: Option<clients::ClientCursor>,
+    search: String,
+) -> Result<clients::LocalClientPage, String> {
+    clients::get_local_clients_impl(app, workspace_id, cursor, search)
+}
+
+#[tauri::command]
+pub fn create_local_client(
+    app: AppHandle,
+    input: clients::CreateClientInput,
+) -> Result<clients::LocalClientPage, String> {
+    clients::create_local_client_impl(app, input)
+}
+
+#[tauri::command]
+pub fn update_local_client(
+    app: AppHandle,
+    workspace_id: String,
+    client_id: String,
+    input: clients::UpdateClientInput,
+    cursor: Option<clients::ClientCursor>,
+    search: String,
+) -> Result<clients::LocalClientPage, String> {
+    clients::update_local_client_impl(app, workspace_id, client_id, input, cursor, search)
+}
+
+#[tauri::command]
+pub fn delete_local_client(
+    app: AppHandle,
+    workspace_id: String,
+    client_id: String,
+    expected_version: i64,
+) -> Result<clients::LocalClientDeletion, String> {
+    clients::delete_local_client_impl(app, workspace_id, client_id, expected_version)
+}
 
 #[tauri::command]
 pub fn get_local_preference(app: AppHandle, key: String) -> Result<Option<String>, String> {
@@ -140,12 +181,13 @@ fn migrate(connection: &mut Connection) -> Result<(), String> {
         return Ok(());
     }
 
-    let transaction = connection
-        .transaction()
-        .map_err(|error| format!("Could not prepare the local database: {error}"))?;
-    transaction
-        .execute_batch(
-            "CREATE TABLE workspaces (
+    if current_version < 1 {
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("Could not prepare the local database: {error}"))?;
+        transaction
+            .execute_batch(
+                "CREATE TABLE workspaces (
                 id TEXT PRIMARY KEY NOT NULL,
                 name TEXT NOT NULL CHECK(length(trim(name)) BETWEEN 1 AND 48),
                 accent_color TEXT NOT NULL CHECK(accent_color IN ('olive', 'blue', 'terracotta', 'plum', 'teal', 'graphite', 'sage', 'indigo', 'amber', 'rose', 'sky', 'sand')),
@@ -169,10 +211,71 @@ fn migrate(connection: &mut Connection) -> Result<(), String> {
                 deleted_at TEXT
             );
 
-            PRAGMA user_version = 1;",
-        )
-        .map_err(|error| format!("Could not create the local Vesta database: {error}"))?;
-    transaction
-        .commit()
-        .map_err(|error| format!("Could not finish the local database setup: {error}"))
+                PRAGMA user_version = 1;",
+            )
+            .map_err(|error| format!("Could not create the local Vesta database: {error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("Could not finish the local database setup: {error}"))?;
+    }
+
+    if current_version < 2 {
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("Could not prepare the local database upgrade: {error}"))?;
+        transaction
+            .execute_batch(
+                "CREATE TABLE clients (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+                    code TEXT NOT NULL CHECK(length(trim(code)) BETWEEN 1 AND 64),
+                    name TEXT NOT NULL CHECK(length(trim(name)) BETWEEN 1 AND 120),
+                    active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1)),
+                    version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    deleted_at TEXT,
+                    created_by_user_id TEXT NOT NULL,
+                    updated_by_user_id TEXT NOT NULL,
+                    deleted_by_user_id TEXT
+                );
+                CREATE UNIQUE INDEX client_workspace_code_active_unique
+                    ON clients(workspace_id, code COLLATE NOCASE) WHERE deleted_at IS NULL;
+                CREATE INDEX client_workspace_created_active_idx
+                    ON clients(workspace_id, created_at, id) WHERE deleted_at IS NULL;
+                PRAGMA user_version = 2;",
+            )
+            .map_err(|error| format!("Could not upgrade the local Vesta database: {error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("Could not finish the local database upgrade: {error}"))?;
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::migrate;
+    use rusqlite::Connection;
+
+    #[test]
+    fn migration_creates_soft_deletable_clients_without_removing_workspace_data() {
+        let mut connection = Connection::open_in_memory().expect("in-memory SQLite database");
+        migrate(&mut connection).expect("migrations should apply");
+
+        let version: i64 = connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .expect("database version");
+        let client_table_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'clients'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("clients table should exist");
+
+        assert_eq!(version, 2);
+        assert_eq!(client_table_count, 1);
+    }
 }

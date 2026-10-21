@@ -8,6 +8,7 @@ import {
   Pencil,
   Plus,
   Settings2,
+  Users,
   UserRound,
 } from 'lucide-react'
 import {
@@ -54,6 +55,8 @@ type WorkspaceSidebarProps = {
   onLoadMore: () => void
   onCreateWorkspace: () => void
   onNavigateOverview: () => void
+  onNavigateClients: () => void
+  activeView: 'overview' | 'clients'
   onOpenSettings: () => void
   onSignOut?: () => void
 }
@@ -171,7 +174,11 @@ function WorkspaceSwitcher({
   )
 }
 
-function PrimaryNavigation({ onNavigateOverview }: Pick<WorkspaceSidebarProps, 'onNavigateOverview'>) {
+function PrimaryNavigation({
+  onNavigateOverview,
+  onNavigateClients,
+  activeView,
+}: Pick<WorkspaceSidebarProps, 'onNavigateOverview' | 'onNavigateClients' | 'activeView'>) {
   const { t } = useLanguage()
   const { isMobile, setOpenMobile } = useSidebar()
 
@@ -181,8 +188,8 @@ function PrimaryNavigation({ onNavigateOverview }: Pick<WorkspaceSidebarProps, '
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
-              render={<a href="#overview" aria-current="page" />}
-              isActive
+              render={<a href="#overview" aria-current={activeView === 'overview' ? 'page' : undefined} />}
+              isActive={activeView === 'overview'}
               title={t('navigation', 'overview')}
               onClick={() => {
                 onNavigateOverview()
@@ -191,6 +198,20 @@ function PrimaryNavigation({ onNavigateOverview }: Pick<WorkspaceSidebarProps, '
             >
               <LayoutDashboard className="sidebar-menu-icon" size={16} aria-hidden="true" />
               <span className="sidebar-menu-label">{t('navigation', 'overview')}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              render={<a href="#clients" aria-current={activeView === 'clients' ? 'page' : undefined} />}
+              isActive={activeView === 'clients'}
+              title={t('clients', 'title')}
+              onClick={() => {
+                onNavigateClients()
+                if (isMobile) setOpenMobile(false)
+              }}
+            >
+              <Users className="sidebar-menu-icon" size={16} aria-hidden="true" />
+              <span className="sidebar-menu-label">{t('clients', 'title')}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -272,7 +293,11 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
       </SidebarHeader>
 
       <SidebarContent>
-        <PrimaryNavigation onNavigateOverview={props.onNavigateOverview} />
+        <PrimaryNavigation
+          onNavigateOverview={props.onNavigateOverview}
+          onNavigateClients={props.onNavigateClients}
+          activeView={props.activeView}
+        />
       </SidebarContent>
 
       <SidebarFooter className="workspace-sidebar-footer">
