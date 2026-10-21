@@ -1,11 +1,16 @@
-import React from 'react'
+import React, { type ReactNode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { isTauri } from '@tauri-apps/api/core'
+import { AppProviders } from './app-providers'
+import { configurePreferenceStorage, createMemoryPreferenceStorage } from './features/preferences/preference-store'
 import App from './App.tsx'
 import { DesktopTitlebar } from './features/desktop/components/desktop-titlebar'
-import { LanguageProvider } from './features/localization/language-context'
-import { DateFormatProvider } from './features/preferences/date-format-context'
+import { DesktopSetupGate } from './features/deployment/components/desktop-setup-gate'
 import './styles.css'
+
+const isPackagedDesktop = isTauri() && import.meta.env.MODE !== 'development'
+
+if (isPackagedDesktop) configurePreferenceStorage(createMemoryPreferenceStorage())
 
 if (!isTauri() && 'serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
@@ -23,25 +28,43 @@ if (!isTauri() && 'serviceWorker' in navigator && import.meta.env.PROD) {
   })
 }
 
-function AppRoot() {
-  if (!isTauri()) return <App />
-
+function DesktopWindow({ children }: { children: ReactNode }) {
   return (
     <div className="desktop-app-frame" onContextMenu={(event) => event.preventDefault()}>
       <DesktopTitlebar />
-      <div className="desktop-app-content">
-        <App />
-      </div>
+      <div className="desktop-app-content">{children}</div>
     </div>
+  )
+}
+
+function AppRoot() {
+  if (!isTauri()) {
+    return (
+      <AppProviders>
+        <App />
+      </AppProviders>
+    )
+  }
+
+  if (import.meta.env.MODE === 'development') {
+    return (
+      <AppProviders>
+        <DesktopWindow>
+          <App />
+        </DesktopWindow>
+      </AppProviders>
+    )
+  }
+
+  return (
+    <DesktopSetupGate shell={DesktopWindow}>
+      <App />
+    </DesktopSetupGate>
   )
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <LanguageProvider>
-      <DateFormatProvider>
-        <AppRoot />
-      </DateFormatProvider>
-    </LanguageProvider>
+    <AppRoot />
   </React.StrictMode>,
 )

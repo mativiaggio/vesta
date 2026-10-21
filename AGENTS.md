@@ -11,15 +11,15 @@ Every technical and product decision must support simplicity, reliability, priva
 
 ## 2. Non-negotiable principles
 
-1. **One product, two deployment modes:** Vesta is free and open source, self-hostable, and also offered as a managed paid cloud service. Both modes use the same core product and feature implementations. Never fork business logic by deployment mode.
-2. **Feature parity by default:** A core feature must work in self-hosted and managed deployments. Optional infrastructure may change the implementation, never silently remove the feature. If a feature genuinely requires external infrastructure, design and document an explicit portable alternative or flag the requirement before implementation.
+1. **One product, multiple execution targets:** Vesta is free and open source, can run against a self-hosted server or managed cloud, and includes a fully local, offline-capable desktop mode. These targets use the same core product rules and feature implementations. Never fork business logic by deployment mode.
+2. **Feature parity by default:** A core feature must offer the same user-facing capabilities in web, connected desktop, and fully local desktop. Infrastructure may change how a capability is delivered, never silently remove it. If a feature genuinely requires a server, network, or shared service, design and document an explicit local alternative or limitation before implementation.
 3. **Offline-first, not merely offline-tolerant:** Supported core workflows remain usable without a network connection. Local writes must be durable, queue for synchronization, and reconcile safely when connectivity returns. Do not call a feature offline-capable until its offline behavior is implemented and tested.
 4. **Persist user information:** User-created and user-modified information must survive application and device restarts. Domain data belongs in a defined durable store; React state, memory-only caches, and browser localStorage are not authoritative persistence mechanisms.
 5. **Strict modularity:** Organize by business feature and responsibility. Keep public interfaces explicit, dependencies directed, and components focused. Do not grow catch-all files or directories.
 6. **Senior-level engineering:** Prefer straightforward, typed, testable, maintainable implementations over clever abstractions or shortcuts. Do not introduce needless patterns, dependencies, duplication, or speculative generalization.
 7. **Rules apply globally:** Cross-cutting standards must hold for every applicable module and database entity. Implement enforcement mechanisms and regression tests rather than relying only on convention.
 8. **Secure by default:** Enforce authorization, least privilege, input validation, tenant isolation, safe filesystem access, and secure handling of secrets in both deployment modes.
-9. **Web and desktop together:** Treat React web and Tauri desktop as equally important first-class clients. Share application logic and components where appropriate, isolate platform-specific integrations, and test both surfaces.
+9. **Web, connected desktop, and offline desktop together:** Treat web and Tauri desktop as first-class clients, and treat packaged desktop offline mode as a first-class execution target. Share application logic and components where appropriate, isolate platform integrations behind adapters, and verify feature parity across all three.
 10. **Performance is a requirement:** Optimize cold start, interaction responsiveness, database operations, sync efficiency, bundle size, and memory usage. Measure before claiming improvement.
 
 ## 3. Required technology and boundaries
@@ -31,11 +31,25 @@ Every technical and product decision must support simplicity, reliability, priva
 - Web: React application consuming the same documented application API as desktop.
 - Server: a TypeScript API/service layer. The HTTP framework, package manager, build system, and deployment framework must be selected and documented in an Architecture Decision Record (ADR) before introduction; do not assume unstated stack choices.
 - Offline local storage: use a durable local database suitable for each platform. Recommended: SQLite through a controlled Tauri/Rust adapter on desktop, and IndexedDB through a typed adapter on web. This recommendation is not an authorization to bypass the repository's chosen architecture.
-- PostgreSQL is the server-side source of truth after synchronization; local databases store durable working replicas and pending mutations. Never expose database credentials or connect directly to PostgreSQL from an untrusted browser or Tauri frontend.
+- In connected deployments, PostgreSQL is the server-side source of truth after synchronization; local databases store durable working replicas and pending mutations. In fully local desktop mode, the selected local SQLite database is authoritative unless an explicit sync/export operation is configured. Never expose database credentials or connect directly to PostgreSQL from an untrusted browser or Tauri frontend.
 
 ## 4. Deployment parity and infrastructure abstraction
 
 Model deployment mode as configuration, **not** as a collection of `if (isCloud)` checks across product code. Implement capabilities behind well-defined interfaces, register implementations at the composition root, and keep domain/application modules unaware of provider names.
+
+### Execution targets and feature parity
+
+Vesta has three execution targets that every core feature must account for:
+
+1. **Web:** browser client using the documented application API and browser-local durable storage where supported.
+2. **Connected desktop:** packaged Tauri client using the same feature behavior while connected to a self-hosted or managed server.
+3. **Fully local desktop:** packaged Tauri client that works without a Vesta API, account, activation call, or network connection; domain data is stored durably in the user's selected local data directory.
+
+For each new or changed feature, preserve the same domain rules and user-facing capability across these targets. Share use cases and contracts; inject the appropriate API, local database, file, or sync adapter at the composition root. Do not let a feature silently disappear or become read-only in local desktop mode because an API is unavailable. Before implementation, explicitly state which targets are supported, how data is persisted in each, what works offline, and what happens when a required remote capability cannot be reached. If a capability cannot have a meaningful local equivalent, document that limitation and clarify the product requirement before treating the feature as complete.
+
+### Cloud-synchronized folders and SQLite
+
+A folder inside OneDrive, Dropbox, or another file-sync provider is still a local folder from the app's point of view; file synchronization does not provide database locking, transactions, or safe concurrent multi-device access. **Never promise or implement simultaneous access to one SQLite database file from multiple computers through a synced folder.** Sync providers may copy a database while it is open, create conflicting copies, or overwrite newer data. A synced folder may be used for backup or carefully controlled transfer only when the database is closed and the behavior is explicitly documented. To use the same workspace concurrently across devices, implement an explicit synchronization protocol with durable per-device databases, queued mutations, idempotency, acknowledgments, and entity-specific conflict handling. Make these guarantees and limitations visible before users select a synced directory.
 
 Each integration must define a provider-neutral contract, a production-capable implementation, a self-host-friendly implementation, configuration validation, failure semantics, observability, and tests covering both implementations. External managed services must remain optional for core product functionality unless a product requirement explicitly says otherwise.
 
@@ -99,6 +113,8 @@ Dependency direction: platform apps → features/application → domain contract
 
 Design local persistence and sync as first-class modules, not a retrofit. For every mutation, specify local durability, queue format, retry behavior, server acknowledgment, idempotency, conflict handling, and eventual consistency. Every mutable synced record needs stable IDs, timestamps, and an explicit version/change-tracking mechanism appropriate to the domain. A generic `updated_at` timestamp alone is insufficient as a conflict-resolution protocol.
 
+The fully local desktop mode is a supported product mode, not a setup shell for the server-backed app. Core workflows must not require an API call to read or write local data. A local mutation is successful only after the local database commits it durably. When sync is available, server acknowledgment is a separate state and must only be shown after server confirmation. A feature that is intentionally online-only must say so and must not block unrelated offline workflows.
+
 Support app restart, lost connectivity, retries, duplicate requests, multiple devices, server-side soft deletes, and partial failures. Make pending/synced/error states truthful and unobtrusive. Acknowledge a write as locally saved only after it is durably committed; acknowledge server synchronization only after server confirmation. Do not discard unsynced mutations on logout, navigation, crashes, or upgrades without an explicit recovery policy.
 
 Define conflicts by entity type: task field updates may follow deterministic merge/version policies; document edits may need a stronger model. Do **not** introduce CRDTs, operational transforms, or last-write-wins globally without evaluating their requirements and documenting the choice. Design tenant-safe sync endpoints and minimize payloads. Attachment uploads need offline metadata/pending-upload handling and explicit retry semantics.
@@ -141,18 +157,18 @@ Performance must be designed and measured, not asserted. Define measurable budge
 
 Each meaningful feature needs automated coverage at the appropriate boundaries: unit tests for domain rules, integration tests for Drizzle repositories/migrations and infrastructure adapters, API authorization tests, offline/sync resilience tests, and UI tests for significant workflows. Run relevant lint, formatting, type checks, tests, and builds before calling work complete.
 
-Test both deployment modes for feature parity and both client surfaces where behavior may differ. Verify email provider versus secure administrative fallback; S3-compatible versus filesystem storage; online versus offline mutations; retry/idempotency/conflict behavior; soft deletion/restoration; tenant isolation; accessibility; and failure handling. Add regression tests whenever fixing a bug. Do not mark unfinished code as production-ready or hide incomplete work behind optimistic language.
+Test feature parity across web, connected desktop, and fully local desktop. Verify local persistence after restart; that local desktop core workflows work with the API unavailable; that connected clients use the same domain rules; online versus offline mutations; retry/idempotency/conflict behavior; soft deletion/restoration; tenant isolation; accessibility; and failure handling. Where integrations apply, verify email provider versus secure administrative fallback and S3-compatible versus filesystem storage. Add regression tests whenever fixing a bug. Never claim that a cloud-synced SQLite directory supports multi-device concurrent use unless a separate, tested synchronization design provides that guarantee. Do not mark unfinished code as production-ready or hide incomplete work behind optimistic language.
 
 ## 13. Required agent workflow
 
 Before changing code, inspect the existing repository structure, local conventions, relevant modules, schemas, tests, and configuration. Do not invent APIs or overwrite established architecture. For substantial work, give a concise implementation plan and identify the affected modules and contracts.
 
-When implementing a feature, explicitly evaluate: domain model, database migration, API contract, authorization, self-hosted deployment, managed deployment, web, desktop, offline storage, synchronization, shadcn/UI composition, error states, and tests. Apply only the portions that are relevant, but never silently ignore a relevant surface.
+When implementing a feature, explicitly evaluate: domain model, database migration, API contract, authorization, self-hosted deployment, managed deployment, web, connected desktop, fully local desktop without an API, offline storage, synchronization, shadcn/UI composition, error states, and tests. Record which execution targets are supported and how the feature behaves in each. Apply only the relevant portions, but never silently ignore a relevant surface or assume a local desktop user has a server.
 
 After implementation, report what changed, which checks passed, any checks not run, outstanding risks, and any deliberate deviations. If a rule must be changed, propose a change to this file or an ADR first; do not establish a conflicting pattern inside an individual feature.
 
 ## 14. Definition of done
 
-A feature is complete only when it is modular, fully typed, persisted correctly, authorized, accessible, covered by appropriate tests, and usable in both self-hosted and managed deployments. It must work on web and desktop wherever applicable, and honor the promised offline behavior. It must use shadcn/ui conventions, preserve global database invariants, avoid unnecessary dependencies and product clutter, and meet documented performance expectations.
+A feature is complete only when it is modular, fully typed, persisted correctly, authorized, accessible, covered by appropriate tests, and has documented parity across web, connected desktop, and fully local desktop. Core local workflows must work without a server and survive app/device restarts. Connected modes must preserve the same domain behavior. It must honor the promised offline and sync behavior, use shadcn/ui conventions, preserve global database invariants, avoid unnecessary dependencies and product clutter, and meet documented performance expectations. Do not claim that placing a database file in a cloud-synced folder provides safe multi-device database sharing.
 
 **Do not trade away these properties to finish a task faster.** When full delivery is not feasible, clearly distinguish an incomplete increment from a completed feature.

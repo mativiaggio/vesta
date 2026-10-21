@@ -8,7 +8,6 @@ describe('resolveApiBaseUrl', () => {
         configuredUrl: 'https://api.example.test/',
         currentOrigin: 'http://tauri.localhost',
         isDevelopment: false,
-        isDesktop: true,
       }),
     ).toBe('https://api.example.test')
   })
@@ -18,7 +17,6 @@ describe('resolveApiBaseUrl', () => {
       resolveApiBaseUrl({
         currentOrigin: 'http://localhost:5173',
         isDevelopment: true,
-        isDesktop: false,
       }),
     ).toBe('http://localhost:3000')
   })
@@ -28,18 +26,16 @@ describe('resolveApiBaseUrl', () => {
       resolveApiBaseUrl({
         currentOrigin: 'https://vesta.example.test',
         isDevelopment: false,
-        isDesktop: false,
       }),
     ).toBe('https://vesta.example.test')
   })
 
-  it('rejects a packaged desktop build without an API origin', () => {
-    expect(() =>
+  it('uses the packaged app origin when local desktop does not need an API', () => {
+    expect(
       resolveApiBaseUrl({
         currentOrigin: 'http://tauri.localhost',
         isDevelopment: false,
-        isDesktop: true,
       }),
-    ).toThrow('VITE_API_URL is required')
+    ).toBe('http://tauri.localhost')
   })
 })
