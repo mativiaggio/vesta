@@ -12,7 +12,8 @@ Vesta is a focused digital office for independent professionals. The packaged de
 - Create the web build: `npm run build`
 - Run the complete formatting, lint, type, test, build, performance, and Rust checks: `npm run check`
 - Type-check the API only: `npm run build:server`
-- Build the free local desktop installer: `npm run tauri -- build` (no API or PostgreSQL is required)
+- Build a versioned Windows desktop installer: `npm run release:all -- 0.1.5` (updates package and Tauri version files, then builds the NSIS installer; no API or PostgreSQL is required). The installer is written to `src-tauri/target/release/bundle/nsis/`.
+- Stage an official GitHub Release asset: `npm run release:all -- 0.1.5 --official`. This also copies the installer to `release-assets/official/` so it can be attached to a GitHub Release; it does not publish the release.
 - The packaged app stores its SQLite database as `vesta.sqlite3` in the folder selected on first launch.
 
 `npm run tauri dev` keeps the connected development workflow: it starts the API and Vite together, and API logs share that terminal. With the self-hosted console recovery fallback enabled, password reset URLs appear there under `[ADMIN ONLY]`.
