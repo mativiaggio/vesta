@@ -1,7 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { and, asc, count, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import { db } from '../../../../../packages/database/src/client.js'
-import { syncMutationReceipt, workspace, workspaceMembership } from '../../../../../packages/database/src/schema.js'
+import {
+  client as clientRecord,
+  syncMutationReceipt,
+  workspace,
+  workspaceMembership,
+} from '../../../../../packages/database/src/schema.js'
 import {
   workspaceActivationSchema,
   workspaceSchema,
@@ -359,6 +364,17 @@ export async function deleteWorkspaceForUser(userId: string, workspaceId: string
         .returning({ id: workspace.id })
 
       if (!deletedWorkspace) throw new WorkspaceNotFoundError()
+
+      await transaction
+        .update(clientRecord)
+        .set({
+          deletedAt: now,
+          updatedAt: now,
+          deletedByUserId: userId,
+          updatedByUserId: userId,
+          version: sql`${clientRecord.version} + 1`,
+        })
+        .where(and(eq(clientRecord.workspaceId, workspaceId), isNull(clientRecord.deletedAt)))
 
       await transaction
         .update(workspaceMembership)

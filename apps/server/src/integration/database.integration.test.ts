@@ -3,6 +3,7 @@ import { and, count, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { db, pool } from '../../../../packages/database/src/client.js'
 import {
+  client as clientRecord,
   rateLimit,
   syncMutationReceipt,
   user,
@@ -18,12 +19,26 @@ import {
   listWorkspacePageForUser,
   maxOutstandingMutationReceiptsPerUser,
 } from '../workspaces/data/workspace-repository.js'
+import {
+  createClientForWorkspace,
+  deleteClientForWorkspace,
+  listClientsForWorkspace,
+  listClientsForWorkspaceForSync,
+  updateClientForWorkspace,
+} from '../clients/client-repository.js'
 
 const firstUserId = randomUUID()
 const secondUserId = randomUUID()
 const workspaceId = randomUUID()
 const createMutationId = randomUUID()
 const activationMutationId = randomUUID()
+const clientId = randomUUID()
+const secondClientId = randomUUID()
+const clientCreateMutationId = randomUUID()
+const clientUpdateNameMutationId = randomUUID()
+const clientUpdateActiveMutationId = randomUUID()
+const clientDeleteMutationId = randomUUID()
+const secondClientCreateMutationId = randomUUID()
 const limiterScope = `integration:${randomUUID()}`
 const authRateLimitKey = `integration-auth:${randomUUID()}`
 
@@ -37,6 +52,7 @@ describe('PostgreSQL workspace persistence', () => {
 
   afterAll(async () => {
     await db.delete(syncMutationReceipt).where(inArray(syncMutationReceipt.userId, [firstUserId, secondUserId]))
+    await db.delete(clientRecord).where(eq(clientRecord.workspaceId, workspaceId))
     await db.delete(workspaceMembership).where(inArray(workspaceMembership.userId, [firstUserId, secondUserId]))
     await db.delete(workspace).where(eq(workspace.id, workspaceId))
     await db.delete(workspaceMutationRateLimit).where(sql`${workspaceMutationRateLimit.key} like ${`${limiterScope}%`}`)
@@ -84,6 +100,113 @@ describe('PostgreSQL workspace persistence', () => {
         accessedAt: new Date().toISOString(),
       }),
     ).toEqual({ kind: 'not-found' })
+  })
+
+  it('scopes clients to workspace membership, merges field patches, and retains soft-deleted rows', async () => {
+    const input = {
+      id: clientId,
+      clientMutationId: clientCreateMutationId,
+      code: 'CLIENT-001',
+      name: 'Client One',
+      active: true,
+    }
+    const firstCreate = await createClientForWorkspace(firstUserId, workspaceId, input)
+    const createReplay = await createClientForWorkspace(firstUserId, workspaceId, input)
+    expect(firstCreate).toEqual(createReplay)
+    expect(firstCreate.kind).toBe('created')
+    if (firstCreate.kind !== 'created') throw new Error('Expected the client to be created.')
+    expect(firstCreate.client.createdByUserId).toBe(firstUserId)
+
+    const duplicateCode = await createClientForWorkspace(firstUserId, workspaceId, {
+      ...input,
+      id: secondClientId,
+      clientMutationId: secondClientCreateMutationId,
+      code: 'client-001',
+    })
+    expect(duplicateCode.kind).toBe('conflict')
+
+    const nameUpdate = await updateClientForWorkspace(firstUserId, workspaceId, clientId, {
+      name: 'Renamed Client',
+      expectedVersion: 1,
+      clientMutationId: clientUpdateNameMutationId,
+    })
+    expect(nameUpdate.kind).toBe('updated')
+    const activeUpdate = await updateClientForWorkspace(firstUserId, workspaceId, clientId, {
+      active: false,
+      expectedVersion: 1,
+      clientMutationId: clientUpdateActiveMutationId,
+    })
+    expect(activeUpdate.kind).toBe('updated')
+    if (activeUpdate.kind !== 'updated') throw new Error('Expected the client to be updated.')
+    expect(activeUpdate.client).toMatchObject({
+      name: 'Renamed Client',
+      active: false,
+      version: 3,
+      updatedByUserId: firstUserId,
+    })
+
+    const deniedList = await listClientsForWorkspace(secondUserId, workspaceId, null, '')
+    expect(deniedList.kind).toBe('not-found')
+
+    const deletion = await deleteClientForWorkspace(firstUserId, workspaceId, clientId, {
+      expectedVersion: 1,
+      clientMutationId: clientDeleteMutationId,
+    })
+    expect(deletion.kind).toBe('deleted')
+    const activePage = await listClientsForWorkspace(firstUserId, workspaceId, null, '')
+    expect(activePage.kind).toBe('listed')
+    expect(activePage.clients.some((item) => item.id === clientId)).toBe(false)
+
+    const syncPage = await listClientsForWorkspaceForSync(firstUserId, workspaceId, null)
+    expect(syncPage.kind).toBe('listed')
+    const deletedClient = syncPage.clients.find((item) => item.id === clientId)
+    expect(deletedClient?.deletedByUserId).toBe(firstUserId)
+    expect(typeof deletedClient?.deletedAt).toBe('string')
+    const persistedRows = await db
+      .select({ id: clientRecord.id })
+      .from(clientRecord)
+      .where(eq(clientRecord.id, clientId))
+    expect(persistedRows).toHaveLength(1)
+
+    const reusedCode = await createClientForWorkspace(firstUserId, workspaceId, {
+      id: secondClientId,
+      clientMutationId: secondClientCreateMutationId,
+      code: 'client-001',
+      name: 'Replacement Client',
+      active: true,
+    })
+    expect(reusedCode.kind).toBe('created')
+
+    const baseTime = Date.now() + 5_000
+    await db.insert(clientRecord).values(
+      Array.from({ length: 26 }, (_, index) => {
+        const createdAt = new Date(baseTime + index * 1_000)
+        return {
+          id: randomUUID(),
+          workspaceId,
+          code: `PAGE-${String(index).padStart(3, '0')}`,
+          name: index === 25 ? 'Needle Client' : 'Paged Client',
+          active: true,
+          version: 1,
+          createdByUserId: firstUserId,
+          updatedByUserId: firstUserId,
+          createdAt,
+          updatedAt: createdAt,
+        }
+      }),
+    )
+
+    const firstPage = await listClientsForWorkspace(firstUserId, workspaceId, null, '')
+    expect(firstPage.clients).toHaveLength(25)
+    expect(firstPage.nextCursor).not.toBeNull()
+    const secondPage = await listClientsForWorkspace(firstUserId, workspaceId, firstPage.nextCursor, '')
+    expect(secondPage.clients).toHaveLength(2)
+    expect(secondPage.nextCursor).toBeNull()
+
+    const filteredPage = await listClientsForWorkspace(firstUserId, workspaceId, null, 'needle')
+    expect(filteredPage.clients).toHaveLength(1)
+    expect(filteredPage.clients[0]?.name).toBe('Needle Client')
+    expect(filteredPage.nextCursor).toBeNull()
   })
 
   it('replays activation idempotently without incrementing membership twice', async () => {

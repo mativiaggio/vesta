@@ -20,7 +20,7 @@ Vesta brings tasks, documents, and client work into one quiet digital office so 
 
 ## Capabilities and Constraints
 
-Vesta supports email/password authentication and user-owned workspaces with a name, accent color, and identifying icon. The first sign-in creates a workspace; returning users resume their most recently used workspace. Workspaces use the authenticated PostgreSQL API in web and Tauri. Tasks, documents, clients, local durable storage, and synchronization are not implemented yet.
+Vesta supports email/password authentication and user-owned workspaces with a name, accent color, and identifying icon. The first sign-in creates a workspace; returning users resume their most recently used workspace. Workspaces and client records use the authenticated PostgreSQL API in web and connected Tauri, with durable IndexedDB replicas and queued offline mutations. Packaged local Tauri stores workspaces and clients in the selected SQLite folder without an account or API. Client records support code, name, active state, audit metadata, and soft deletion. Tasks and documents are not implemented yet.
 
 ## Brand Commitments
 
