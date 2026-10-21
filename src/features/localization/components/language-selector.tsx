@@ -1,14 +1,13 @@
-import type { ComponentProps } from 'react'
 import { Globe2 } from 'lucide-react'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select'
+import { cn } from '../../../lib/utils'
 import { useLanguage } from '../language-context'
 
 type LanguageSelectorProps = {
-  side?: ComponentProps<typeof SelectContent>['side']
-  align?: ComponentProps<typeof SelectContent>['align']
+  className?: string
 }
 
-export function LanguageSelector({ side = 'bottom', align = 'end' }: LanguageSelectorProps) {
+export function LanguageSelector({ className }: LanguageSelectorProps) {
   const { language, setLanguage, t } = useLanguage()
 
   function handleLanguageChange(value: string) {
@@ -17,13 +16,13 @@ export function LanguageSelector({ side = 'bottom', align = 'end' }: LanguageSel
 
   return (
     <Select value={language} onValueChange={handleLanguageChange}>
-      <SelectTrigger className="language-selector-trigger" aria-label={t('language', 'label')}>
+      <SelectTrigger className={cn('language-selector-trigger', className)} aria-label={t('language', 'label')}>
         <Globe2 size={14} aria-hidden="true" />
         <span className="language-selector-value">
           <SelectValue />
         </span>
       </SelectTrigger>
-      <SelectContent className="language-selector-content" align={align} side={side} sideOffset={6}>
+      <SelectContent className="language-selector-content" align="end" sideOffset={6}>
         <SelectItem className="language-selector-option" value="en">
           {t('language', 'english')}
         </SelectItem>

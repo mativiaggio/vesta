@@ -6,6 +6,7 @@ import { SidebarInset, SidebarProvider, SidebarTrigger } from '../../../componen
 import { useLanguage } from '../../localization/language-context'
 import type { Theme } from '../../preferences/theme-preference'
 import { useWorkspaceState } from '../application/use-workspace-state'
+import { SettingsDialog } from '../../settings/components/settings-dialog'
 import { WorkspaceIconGlyph } from './workspace-icon'
 import { workspaceAccentColors } from './workspace-theme'
 import { WorkspaceSidebar } from './workspace-sidebar'
@@ -23,9 +24,17 @@ type WorkspaceExperienceProps = {
   userEmail: string
   onSignOut: () => void
   theme: Theme
+  onThemeChange: (theme: Theme) => void
 }
 
-export function WorkspaceExperience({ userId, userName, userEmail, onSignOut, theme }: WorkspaceExperienceProps) {
+export function WorkspaceExperience({
+  userId,
+  userName,
+  userEmail,
+  onSignOut,
+  theme,
+  onThemeChange,
+}: WorkspaceExperienceProps) {
   const { t } = useLanguage()
   const {
     workspaces,
@@ -44,6 +53,7 @@ export function WorkspaceExperience({ userId, userName, userEmail, onSignOut, th
     retry,
   } = useWorkspaceState(userId)
   const [isCreating, setIsCreating] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [name, setName] = useState('')
   const [accentColor, setAccentColor] = useState<WorkspaceAccent>('olive')
   const [icon, setIcon] = useState<WorkspaceIcon>('briefcase')
@@ -92,6 +102,7 @@ export function WorkspaceExperience({ userId, userName, userEmail, onSignOut, th
           nextCursor={nextCursor}
           isSaving={isSaving}
           syncStatus={syncStatus}
+          onOpenSettings={() => setIsSettingsOpen(true)}
           onActivateWorkspace={(workspaceId) => {
             void activateWorkspace(workspaceId)
           }}
@@ -270,6 +281,12 @@ export function WorkspaceExperience({ userId, userName, userEmail, onSignOut, th
           </section>
         ) : null}
       </SidebarInset>
+      <SettingsDialog
+        open={isSettingsOpen}
+        onOpenChange={setIsSettingsOpen}
+        theme={theme}
+        onThemeChange={onThemeChange}
+      />
     </SidebarProvider>
   )
 }

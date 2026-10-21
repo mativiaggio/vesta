@@ -19,7 +19,6 @@ import {
 } from '../../../components/ui/sidebar'
 import { useSidebar } from '../../../components/ui/sidebar-context'
 import { useLanguage } from '../../localization/language-context'
-import { LanguageSelector } from '../../localization/components/language-selector'
 import type { useWorkspaceState } from '../application/use-workspace-state'
 import { WorkspaceIconGlyph } from './workspace-icon'
 import { workspaceAccentColors } from './workspace-theme'
@@ -43,6 +42,7 @@ type WorkspaceSidebarProps = {
   onLoadMore: () => void
   onCreateWorkspace: () => void
   onNavigateOverview: () => void
+  onOpenSettings: () => void
   onSignOut: () => void
 }
 
@@ -209,7 +209,7 @@ function UserMenu({
 
 export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
   const { t } = useLanguage()
-  const { isMobile, theme } = useSidebar()
+  const { isMobile, theme, setOpenMobile } = useSidebar()
 
   return (
     <Sidebar theme={theme} mobileTitle={t('navigation', 'primary')}>
@@ -240,10 +240,15 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
             )}
           </span>
         )}
-        <LanguageSelector side={isMobile ? 'bottom' : 'right'} align={isMobile ? 'end' : 'start'} />
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton disabled title={t('navigation', 'settings')}>
+            <SidebarMenuButton
+              title={t('navigation', 'settings')}
+              onClick={() => {
+                if (isMobile) setOpenMobile(false)
+                props.onOpenSettings()
+              }}
+            >
               <Settings2 className="sidebar-menu-icon" size={16} aria-hidden="true" />
               <span className="sidebar-menu-label">{t('navigation', 'settings')}</span>
             </SidebarMenuButton>

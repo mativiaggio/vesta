@@ -30,10 +30,14 @@ SelectTrigger.displayName = SelectPrimitive.Trigger.displayName
 export const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
->(({ className, children, position = 'popper', ...props }, ref) => (
+>(({ className, children, onEscapeKeyDown, position = 'popper', ...props }, ref) => (
   <SelectPrimitive.Content
     ref={ref}
     position={position}
+    onEscapeKeyDown={(event) => {
+      onEscapeKeyDown?.(event)
+      event.stopPropagation()
+    }}
     className={cn(
       'z-50 max-h-96 min-w-[116px] overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1 text-[11px] text-[var(--foreground)] shadow-lg outline-none',
       className,

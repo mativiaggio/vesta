@@ -132,6 +132,7 @@ export default function App() {
           userName={user.name}
           userEmail={user.email}
           theme={theme}
+          onThemeChange={setTheme}
           onSignOut={() => {
             setCachedIdentity(null)
             setIsLocallySignedOut(true)

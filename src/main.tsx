@@ -4,6 +4,7 @@ import { isTauri } from '@tauri-apps/api/core'
 import App from './App.tsx'
 import { DesktopTitlebar } from './features/desktop/components/desktop-titlebar'
 import { LanguageProvider } from './features/localization/language-context'
+import { DateFormatProvider } from './features/preferences/date-format-context'
 import './styles.css'
 
 if (!isTauri() && 'serviceWorker' in navigator && import.meta.env.PROD) {
@@ -38,7 +39,9 @@ function AppRoot() {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <LanguageProvider>
-      <AppRoot />
+      <DateFormatProvider>
+        <AppRoot />
+      </DateFormatProvider>
     </LanguageProvider>
   </React.StrictMode>,
 )
