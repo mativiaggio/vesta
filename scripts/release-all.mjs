@@ -149,7 +149,7 @@ try {
   process.stdout.write(`\nInstaller${installers.length === 1 ? '' : 's'}:\n${installers.join('\n')}\n`)
 
   if (officialRelease) {
-    const officialAssetsDirectory = join(projectRoot, 'release-assets/official')
+    const officialAssetsDirectory = join(projectRoot, 'releases')
     mkdirSync(officialAssetsDirectory, { recursive: true })
     const stagedInstallers = installers.map((installer) => {
       const destination = join(officialAssetsDirectory, basename(installer))
