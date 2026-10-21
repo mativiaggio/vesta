@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { and, asc, count, desc, eq, gt, isNull, or, sql } from 'drizzle-orm'
+import { and, asc, count, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle-orm'
 import { db } from '../../../../../packages/database/src/client.js'
 import { syncMutationReceipt, workspace, workspaceMembership } from '../../../../../packages/database/src/schema.js'
 import {
@@ -7,6 +7,8 @@ import {
   workspaceSchema,
   type ActivateWorkspaceMutation,
   type CreateWorkspaceMutation,
+  type DeleteWorkspaceMutation,
+  type UpdateWorkspaceMutation,
   type Workspace,
 } from '../../../../../packages/workspaces/src/contract.js'
 import type { WorkspaceCursor } from '../application/workspace-cursor.js'
@@ -16,11 +18,12 @@ const pageSize = 50
 export const maxOutstandingMutationReceiptsPerUser = 10_000
 
 type Transaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
-type MutationKind = 'workspace.create' | 'workspace.activate'
+type MutationKind = 'workspace.create' | 'workspace.update' | 'workspace.activate' | 'workspace.delete'
 
 class MutationConflictError extends Error {}
+class WorkspaceNotFoundError extends Error {}
 
-function hashPayload(payload: Record<string, string>): string {
+function hashPayload(payload: Record<string, string | number>): string {
   return createHash('sha256').update(JSON.stringify(payload)).digest('hex')
 }
 
@@ -125,17 +128,17 @@ async function findWorkspaceForUser(transaction: Transaction, userId: string, wo
 }
 
 export async function listWorkspacePageForUser(userId: string, cursor: WorkspaceCursor | null) {
-  const cursorCondition = cursor
-    ? or(
-        gt(workspaceMembership.createdAt, cursor.createdAt),
-        and(eq(workspaceMembership.createdAt, cursor.createdAt), gt(workspaceMembership.id, cursor.id)),
-      )
-    : undefined
+  const normalizedName = sql<string>`lower(${workspace.name})`
+  const cursorName = cursor?.name?.toLowerCase()
+  const cursorId = cursor?.id
+  const cursorCondition =
+    cursorName && cursorId
+      ? or(gt(normalizedName, cursorName), and(eq(normalizedName, cursorName), gt(workspace.id, cursorId)))
+      : undefined
 
   const rows = await db
     .select({
       ...workspaceSelection,
-      membershipId: workspaceMembership.id,
       membershipCreatedAt: workspaceMembership.createdAt,
     })
     .from(workspaceMembership)
@@ -148,7 +151,7 @@ export async function listWorkspacePageForUser(userId: string, cursor: Workspace
         cursorCondition,
       ),
     )
-    .orderBy(asc(workspaceMembership.createdAt), asc(workspaceMembership.id))
+    .orderBy(asc(normalizedName), asc(workspace.id))
     .limit(pageSize + 1)
 
   const [lastWorkspace] = await db
@@ -168,7 +171,7 @@ export async function listWorkspacePageForUser(userId: string, cursor: Workspace
   return {
     workspaces: page.map(parseWorkspace),
     lastWorkspaceId: lastWorkspace?.id ?? null,
-    nextCursor: hasMore && tail ? { createdAt: tail.membershipCreatedAt, id: tail.membershipId } : null,
+    nextCursor: hasMore && tail ? { createdAt: tail.membershipCreatedAt, id: tail.id, name: tail.name } : null,
   }
 }
 
@@ -230,6 +233,157 @@ export async function createWorkspaceForUser(userId: string, input: CreateWorksp
       return { kind: 'created' as const, workspace: result }
     })
   } catch (error) {
+    if (error instanceof MutationConflictError) return { kind: 'conflict' as const }
+    throw error
+  }
+}
+
+export async function updateWorkspaceForUser(userId: string, workspaceId: string, input: UpdateWorkspaceMutation) {
+  // Workspace settings merge by field: independent offline edits coexist, while same-field edits follow commit order.
+  const now = new Date()
+  const payloadHash = hashPayload({
+    ...(input.accentColor === undefined ? {} : { accentColor: input.accentColor }),
+    ...(input.icon === undefined ? {} : { icon: input.icon }),
+    ...(input.name === undefined ? {} : { name: input.name }),
+  })
+
+  try {
+    return await db.transaction(async (transaction) => {
+      const [membership] = await transaction
+        .select({ role: workspaceMembership.role })
+        .from(workspaceMembership)
+        .where(
+          and(
+            eq(workspaceMembership.userId, userId),
+            eq(workspaceMembership.workspaceId, workspaceId),
+            isNull(workspaceMembership.deletedAt),
+          ),
+        )
+        .limit(1)
+      if (membership?.role !== 'owner') return { kind: 'not-found' as const }
+
+      const existing = await findWorkspaceForUser(transaction, userId, workspaceId)
+      if (!existing) return { kind: 'not-found' as const }
+
+      const reservation = await reserveMutation(transaction, {
+        userId,
+        mutationId: input.clientMutationId,
+        kind: 'workspace.update',
+        entityId: workspaceId,
+        payloadHash,
+        now,
+      })
+
+      if (reservation === 'conflict') return { kind: 'conflict' as const }
+      if (reservation === 'capacity') return { kind: 'capacity' as const }
+      if (reservation === 'duplicate') {
+        const current = await findWorkspaceForUser(transaction, userId, workspaceId)
+        if (!current) return { kind: 'not-found' as const }
+        return { kind: 'updated' as const, workspace: current }
+      }
+
+      const [updated] = await transaction
+        .update(workspace)
+        .set({
+          ...(input.name === undefined ? {} : { name: input.name }),
+          ...(input.accentColor === undefined ? {} : { accentColor: input.accentColor }),
+          ...(input.icon === undefined ? {} : { icon: input.icon }),
+          version: sql`${workspace.version} + 1`,
+          updatedAt: now,
+        })
+        .where(and(eq(workspace.id, workspaceId), isNull(workspace.deletedAt)))
+        .returning({ id: workspace.id })
+
+      if (!updated) throw new MutationConflictError()
+
+      const result = await findWorkspaceForUser(transaction, userId, workspaceId)
+      if (!result) throw new Error('Updated workspace could not be read back.')
+      return { kind: 'updated' as const, workspace: result }
+    })
+  } catch (error) {
+    if (error instanceof MutationConflictError) return { kind: 'conflict' as const }
+    throw error
+  }
+}
+
+export async function deleteWorkspaceForUser(userId: string, workspaceId: string, input: DeleteWorkspaceMutation) {
+  const now = new Date()
+  const payloadHash = hashPayload({ confirmationName: input.confirmationName })
+
+  try {
+    return await db.transaction(async (transaction) => {
+      const [membership] = await transaction
+        .select({
+          role: workspaceMembership.role,
+          membershipDeletedAt: workspaceMembership.deletedAt,
+          workspaceName: workspace.name,
+          workspaceDeletedAt: workspace.deletedAt,
+        })
+        .from(workspaceMembership)
+        .innerJoin(workspace, eq(workspace.id, workspaceMembership.workspaceId))
+        .where(and(eq(workspaceMembership.userId, userId), eq(workspaceMembership.workspaceId, workspaceId)))
+        .orderBy(sql`${workspaceMembership.deletedAt} ASC NULLS FIRST`)
+        .limit(1)
+
+      const activeMembership = membership?.membershipDeletedAt === null && membership.workspaceDeletedAt === null
+      const alreadyDeleted = membership?.membershipDeletedAt !== null && membership?.workspaceDeletedAt !== null
+      if (membership?.role !== 'owner' || (!activeMembership && !alreadyDeleted)) return { kind: 'not-found' as const }
+      if (input.confirmationName !== membership.workspaceName) return { kind: 'invalid' as const }
+
+      const reservation = await reserveMutation(transaction, {
+        userId,
+        mutationId: input.clientMutationId,
+        kind: 'workspace.delete',
+        entityId: workspaceId,
+        payloadHash,
+        now,
+      })
+
+      if (reservation === 'conflict') return { kind: 'conflict' as const }
+      if (reservation === 'capacity') return { kind: 'capacity' as const }
+      if (reservation === 'duplicate' || alreadyDeleted) {
+        return {
+          kind: 'deleted' as const,
+          deletedAt: (membership.workspaceDeletedAt ?? now).toISOString(),
+        }
+      }
+
+      const [deletedWorkspace] = await transaction
+        .update(workspace)
+        .set({
+          deletedAt: now,
+          updatedAt: now,
+          version: sql`${workspace.version} + 1`,
+        })
+        .where(and(eq(workspace.id, workspaceId), isNull(workspace.deletedAt)))
+        .returning({ id: workspace.id })
+
+      if (!deletedWorkspace) throw new WorkspaceNotFoundError()
+
+      await transaction
+        .update(workspaceMembership)
+        .set({
+          deletedAt: now,
+          updatedAt: now,
+          version: sql`${workspaceMembership.version} + 1`,
+        })
+        .where(and(eq(workspaceMembership.workspaceId, workspaceId), isNull(workspaceMembership.deletedAt)))
+
+      await transaction
+        .update(syncMutationReceipt)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(
+          and(
+            eq(syncMutationReceipt.entityId, workspaceId),
+            inArray(syncMutationReceipt.kind, ['workspace.create', 'workspace.update', 'workspace.activate']),
+            isNull(syncMutationReceipt.deletedAt),
+          ),
+        )
+
+      return { kind: 'deleted' as const, deletedAt: now.toISOString() }
+    })
+  } catch (error) {
+    if (error instanceof WorkspaceNotFoundError) return { kind: 'not-found' as const }
     if (error instanceof MutationConflictError) return { kind: 'conflict' as const }
     throw error
   }

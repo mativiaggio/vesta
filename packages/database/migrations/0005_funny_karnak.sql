@@ -1,0 +1,2 @@
+ALTER TABLE "sync_mutation_receipt" DROP CONSTRAINT "sync_mutation_receipt_kind_check";--> statement-breakpoint
+ALTER TABLE "sync_mutation_receipt" ADD CONSTRAINT "sync_mutation_receipt_kind_check" CHECK ("sync_mutation_receipt"."kind" IN ('workspace.create', 'workspace.update', 'workspace.activate', 'workspace.delete'));

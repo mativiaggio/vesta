@@ -91,11 +91,11 @@ export const workspace = pgTable(
   (table) => [
     check(
       'workspace_accent_color_check',
-      sql`${table.accentColor} IN ('olive', 'blue', 'terracotta', 'plum', 'teal', 'graphite')`,
+      sql`${table.accentColor} IN ('olive', 'blue', 'terracotta', 'plum', 'teal', 'graphite', 'sage', 'indigo', 'amber', 'rose', 'sky', 'sand')`,
     ),
     check(
       'workspace_icon_check',
-      sql`${table.icon} IN ('briefcase', 'folder', 'layers', 'notebook-pen', 'laptop', 'palette')`,
+      sql`${table.icon} IN ('briefcase', 'folder', 'layers', 'notebook-pen', 'laptop', 'palette', 'building-2', 'book-open', 'code-2', 'chart-no-axes-combined', 'camera', 'pen-tool')`,
     ),
   ],
 )
@@ -180,7 +180,10 @@ export const syncMutationReceipt = pgTable(
     ...timestamps,
   },
   (table) => [
-    check('sync_mutation_receipt_kind_check', sql`${table.kind} IN ('workspace.create', 'workspace.activate')`),
+    check(
+      'sync_mutation_receipt_kind_check',
+      sql`${table.kind} IN ('workspace.create', 'workspace.update', 'workspace.activate', 'workspace.delete')`,
+    ),
     uniqueIndex('sync_mutation_receipt_user_mutation_active_unique')
       .on(table.userId, table.mutationId)
       .where(sql`${table.deletedAt} IS NULL`),

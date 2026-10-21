@@ -1,6 +1,8 @@
 import type {
   ActivateWorkspaceMutation,
   CreateWorkspaceMutation,
+  DeleteWorkspaceMutation,
+  UpdateWorkspaceMutation,
   Workspace,
 } from '../../../../packages/workspaces/src/contract'
 
@@ -20,7 +22,7 @@ type WorkspaceMetadata = {
   lastServerSyncAt: string | null
 }
 
-type LocalWorkspace = Workspace & { localKey: string; userId: string }
+type LocalWorkspace = Workspace & { localKey: string; userId: string; deletedAt: string | null }
 
 type MutationBase = {
   id: string
@@ -35,7 +37,9 @@ type MutationBase = {
 export type WorkspaceMutation = MutationBase &
   (
     | { kind: 'workspace.create'; payload: CreateWorkspaceMutation }
+    | { kind: 'workspace.update'; payload: UpdateWorkspaceMutation }
     | { kind: 'workspace.activate'; payload: ActivateWorkspaceMutation }
+    | { kind: 'workspace.delete'; payload: DeleteWorkspaceMutation }
   )
 
 export type LocalWorkspaceState = {
@@ -139,8 +143,29 @@ function fromLocalWorkspace(row: LocalWorkspace): Workspace {
   }
 }
 
-function toLocalWorkspace(userId: string, workspace: Workspace): LocalWorkspace {
-  return { ...workspace, localKey: workspaceKey(userId, workspace.id), userId }
+function applyWorkspaceUpdate(workspace: Workspace, input: UpdateWorkspaceMutation): Workspace {
+  return {
+    ...workspace,
+    ...(input.name === undefined ? {} : { name: input.name }),
+    ...(input.accentColor === undefined ? {} : { accentColor: input.accentColor }),
+    ...(input.icon === undefined ? {} : { icon: input.icon }),
+  }
+}
+
+function sortMutationsByCreation(left: WorkspaceMutation, right: WorkspaceMutation): number {
+  return left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id)
+}
+
+function nextMutationTimestamp(mutations: WorkspaceMutation[]): string {
+  const latestMutationAt = mutations.reduce((latest, mutation) => {
+    const timestamp = Date.parse(mutation.createdAt)
+    return Number.isFinite(timestamp) ? Math.max(latest, timestamp) : latest
+  }, 0)
+  return new Date(Math.max(Date.now(), latestMutationAt + 1)).toISOString()
+}
+
+function toLocalWorkspace(userId: string, workspace: Workspace, deletedAt: string | null = null): LocalWorkspace {
+  return { ...workspace, localKey: workspaceKey(userId, workspace.id), userId, deletedAt }
 }
 
 export async function loadLocalWorkspaceState(userId: string): Promise<LocalWorkspaceState> {
@@ -161,7 +186,10 @@ export async function loadLocalWorkspaceState(userId: string): Promise<LocalWork
   await transactionDone(transaction)
 
   return {
-    workspaces: workspaceRows.map(fromLocalWorkspace).sort((left, right) => left.id.localeCompare(right.id)),
+    workspaces: workspaceRows
+      .filter((workspace) => workspace.deletedAt == null)
+      .map(fromLocalWorkspace)
+      .sort((left, right) => left.id.localeCompare(right.id)),
     activeWorkspaceId: metadata?.activeWorkspaceId ?? null,
     nextCursor: metadata?.nextCursor ?? null,
     pendingCount: mutations.filter((mutation) => mutation.state === 'pending').length,
@@ -182,17 +210,42 @@ export async function mergeWorkspacePage(
   const currentMetadata = (await requestResult(metadataStore.get(userId))) as WorkspaceMetadata | undefined
   const mutations = await mutationsForUser(transaction.objectStore(stores.mutations), userId)
   const hasPendingSelection = mutations.some((mutation) => mutation.state === 'pending')
+  const pendingDeletionIds = new Set(
+    mutations
+      .filter(
+        (mutation): mutation is Extract<WorkspaceMutation, { kind: 'workspace.delete' }> =>
+          mutation.kind === 'workspace.delete' && mutation.state === 'pending',
+      )
+      .map((mutation) => mutation.workspaceId),
+  )
 
   for (const remoteWorkspace of page.workspaces) {
     const key = workspaceKey(userId, remoteWorkspace.id)
     const localWorkspace = (await requestResult(workspaceStore.get(key))) as LocalWorkspace | undefined
+    if (localWorkspace?.deletedAt != null || pendingDeletionIds.has(remoteWorkspace.id)) continue
     const lastAccessedAt =
       localWorkspace?.lastAccessedAt && remoteWorkspace.lastAccessedAt
         ? new Date(localWorkspace.lastAccessedAt) > new Date(remoteWorkspace.lastAccessedAt)
           ? localWorkspace.lastAccessedAt
           : remoteWorkspace.lastAccessedAt
         : (localWorkspace?.lastAccessedAt ?? remoteWorkspace.lastAccessedAt)
-    workspaceStore.put(toLocalWorkspace(userId, { ...remoteWorkspace, lastAccessedAt }))
+
+    const unsentWorkspaceUpdates = mutations
+      .filter(
+        (mutation): mutation is Extract<WorkspaceMutation, { kind: 'workspace.update' }> =>
+          mutation.workspaceId === remoteWorkspace.id && mutation.kind === 'workspace.update',
+      )
+      .sort(sortMutationsByCreation)
+    let mergedWorkspace: Workspace = {
+      ...remoteWorkspace,
+      lastAccessedAt,
+      version: Math.max(localWorkspace?.version ?? remoteWorkspace.version, remoteWorkspace.version),
+      membershipVersion: Math.max(localWorkspace?.membershipVersion ?? 0, remoteWorkspace.membershipVersion),
+    }
+    for (const mutation of unsentWorkspaceUpdates) {
+      mergedWorkspace = applyWorkspaceUpdate(mergedWorkspace, mutation.payload)
+    }
+    workspaceStore.put(toLocalWorkspace(userId, mergedWorkspace))
   }
 
   metadataStore.put({
@@ -259,7 +312,7 @@ export async function enqueueWorkspaceActivation(
     requestResult(workspaceStore.get(key)) as Promise<LocalWorkspace | undefined>,
     requestResult(metadataStore.get(userId)) as Promise<WorkspaceMetadata | undefined>,
   ])
-  if (!current) {
+  if (!current || current.deletedAt != null) {
     transaction.abort()
     throw new Error('Cannot activate a workspace that is not available locally.')
   }
@@ -285,20 +338,147 @@ export async function enqueueWorkspaceActivation(
   await transactionDone(transaction)
 }
 
+export async function enqueueWorkspaceUpdate(
+  userId: string,
+  workspaceId: string,
+  input: UpdateWorkspaceMutation,
+): Promise<void> {
+  const database = await openDatabase()
+  const transaction = database.transaction([stores.workspaces, stores.mutations], 'readwrite')
+  const workspaceStore = transaction.objectStore(stores.workspaces)
+  const mutationStore = transaction.objectStore(stores.mutations)
+  const key = workspaceKey(userId, workspaceId)
+  const current = (await requestResult(workspaceStore.get(key))) as LocalWorkspace | undefined
+  if (!current || current.deletedAt != null) {
+    transaction.abort()
+    throw new Error('Cannot update a workspace that is not available locally.')
+  }
+
+  const updated: Workspace = {
+    ...applyWorkspaceUpdate(fromLocalWorkspace(current), input),
+    version: current.version + 1,
+  }
+  workspaceStore.put(toLocalWorkspace(userId, updated))
+  const existingMutations = await mutationsForUser(mutationStore, userId)
+  mutationStore.put({
+    id: input.clientMutationId,
+    userId,
+    workspaceId,
+    kind: 'workspace.update',
+    payload: input,
+    createdAt: nextMutationTimestamp(existingMutations),
+    attempts: 0,
+    lastError: null,
+    state: 'pending',
+  } satisfies WorkspaceMutation)
+  await transactionDone(transaction)
+}
+
+export async function enqueueWorkspaceDeletion(
+  userId: string,
+  workspaceId: string,
+  input: DeleteWorkspaceMutation,
+): Promise<void> {
+  const database = await openDatabase()
+  const transaction = database.transaction([stores.workspaces, stores.metadata, stores.mutations], 'readwrite')
+  const workspaceStore = transaction.objectStore(stores.workspaces)
+  const metadataStore = transaction.objectStore(stores.metadata)
+  const mutationStore = transaction.objectStore(stores.mutations)
+  const key = workspaceKey(userId, workspaceId)
+  const [current, currentMetadata, existingMutations, workspaceRows] = await Promise.all([
+    requestResult(workspaceStore.get(key)) as Promise<LocalWorkspace | undefined>,
+    requestResult(metadataStore.get(userId)) as Promise<WorkspaceMetadata | undefined>,
+    mutationsForUser(mutationStore, userId),
+    requestResult(workspaceStore.index('userId').getAll(IDBKeyRange.only(userId))) as Promise<LocalWorkspace[]>,
+  ])
+
+  if (!current || current.deletedAt != null || current.name !== input.confirmationName) {
+    transaction.abort()
+    throw new Error('The workspace is not available for deletion.')
+  }
+
+  const deletedAt = nextMutationTimestamp(existingMutations)
+  workspaceStore.put({ ...current, deletedAt })
+
+  const nextWorkspace = workspaceRows
+    .filter((workspace) => workspace.id !== workspaceId && workspace.deletedAt == null)
+    .sort((left, right) => left.name.localeCompare(right.name))[0]
+  const activeWorkspaceId =
+    currentMetadata?.activeWorkspaceId === workspaceId
+      ? (nextWorkspace?.id ?? null)
+      : (currentMetadata?.activeWorkspaceId ?? nextWorkspace?.id ?? null)
+
+  metadataStore.put({
+    userId,
+    activeWorkspaceId,
+    nextCursor: currentMetadata?.nextCursor ?? null,
+    lastServerSyncAt: currentMetadata?.lastServerSyncAt ?? null,
+  } satisfies WorkspaceMetadata)
+  mutationStore.put({
+    id: input.clientMutationId,
+    userId,
+    workspaceId,
+    kind: 'workspace.delete',
+    payload: input,
+    createdAt: deletedAt,
+    attempts: 0,
+    lastError: null,
+    state: 'pending',
+  } satisfies WorkspaceMutation)
+  await transactionDone(transaction)
+}
+
 export async function listPendingWorkspaceMutations(userId: string): Promise<WorkspaceMutation[]> {
   const database = await openDatabase()
   const transaction = database.transaction(stores.mutations, 'readonly')
   const mutations = await mutationsForUser(transaction.objectStore(stores.mutations), userId)
   await transactionDone(transaction)
-  return mutations
-    .filter((mutation) => mutation.state === 'pending')
-    .sort((left, right) => left.createdAt.localeCompare(right.createdAt))
+  return mutations.filter((mutation) => mutation.state === 'pending').sort(sortMutationsByCreation)
 }
 
 export async function completeWorkspaceMutation(mutation: WorkspaceMutation, workspace: Workspace): Promise<void> {
   const database = await openDatabase()
   const transaction = database.transaction([stores.workspaces, stores.mutations], 'readwrite')
-  transaction.objectStore(stores.workspaces).put(toLocalWorkspace(mutation.userId, workspace))
+  const workspaceStore = transaction.objectStore(stores.workspaces)
+  const key = workspaceKey(mutation.userId, workspace.id)
+  const current = (await requestResult(workspaceStore.get(key))) as LocalWorkspace | undefined
+  const queuedMutations = await mutationsForUser(transaction.objectStore(stores.mutations), mutation.userId)
+  const remainingWorkspaceUpdates = queuedMutations
+    .filter(
+      (queued): queued is Extract<WorkspaceMutation, { kind: 'workspace.update' }> =>
+        queued.id !== mutation.id && queued.workspaceId === workspace.id && queued.kind === 'workspace.update',
+    )
+    .sort(sortMutationsByCreation)
+  let acknowledgedWorkspace = workspace
+  for (const queued of remainingWorkspaceUpdates) {
+    acknowledgedWorkspace = applyWorkspaceUpdate(acknowledgedWorkspace, queued.payload)
+  }
+  if (current) {
+    acknowledgedWorkspace = {
+      ...acknowledgedWorkspace,
+      lastAccessedAt:
+        current.lastAccessedAt &&
+        (!acknowledgedWorkspace.lastAccessedAt || current.lastAccessedAt > acknowledgedWorkspace.lastAccessedAt)
+          ? current.lastAccessedAt
+          : acknowledgedWorkspace.lastAccessedAt,
+      version: Math.max(current.version, acknowledgedWorkspace.version),
+      membershipVersion: Math.max(current.membershipVersion, acknowledgedWorkspace.membershipVersion),
+    }
+  }
+  workspaceStore.put(toLocalWorkspace(mutation.userId, acknowledgedWorkspace, current?.deletedAt ?? null))
+  transaction.objectStore(stores.mutations).delete(mutation.id)
+  await transactionDone(transaction)
+}
+
+export async function completeWorkspaceDeletionMutation(mutation: WorkspaceMutation, deletedAt: string): Promise<void> {
+  if (mutation.kind !== 'workspace.delete') throw new Error('Only workspace deletion mutations can be completed here.')
+
+  const database = await openDatabase()
+  const transaction = database.transaction([stores.workspaces, stores.mutations], 'readwrite')
+  const key = workspaceKey(mutation.userId, mutation.workspaceId)
+  const current = (await requestResult(transaction.objectStore(stores.workspaces).get(key))) as
+    LocalWorkspace | undefined
+  if (current) transaction.objectStore(stores.workspaces).put({ ...current, deletedAt })
   transaction.objectStore(stores.mutations).delete(mutation.id)
   await transactionDone(transaction)
 }
@@ -329,7 +509,26 @@ export async function recordWorkspaceMutationFailure(
   permanent: boolean,
 ): Promise<void> {
   const database = await openDatabase()
-  const transaction = database.transaction(stores.mutations, 'readwrite')
+  const restoreDeletedWorkspace = permanent && mutation.kind === 'workspace.delete'
+  const transaction = database.transaction(
+    restoreDeletedWorkspace ? [stores.mutations, stores.workspaces, stores.metadata] : stores.mutations,
+    'readwrite',
+  )
+
+  if (restoreDeletedWorkspace) {
+    const workspaceStore = transaction.objectStore(stores.workspaces)
+    const metadataStore = transaction.objectStore(stores.metadata)
+    const key = workspaceKey(mutation.userId, mutation.workspaceId)
+    const [workspace, metadata] = await Promise.all([
+      requestResult(workspaceStore.get(key)) as Promise<LocalWorkspace | undefined>,
+      requestResult(metadataStore.get(mutation.userId)) as Promise<WorkspaceMetadata | undefined>,
+    ])
+    if (workspace?.deletedAt != null) workspaceStore.put({ ...workspace, deletedAt: null })
+    if (metadata?.activeWorkspaceId === null) {
+      metadataStore.put({ ...metadata, activeWorkspaceId: mutation.workspaceId } satisfies WorkspaceMetadata)
+    }
+  }
+
   transaction.objectStore(stores.mutations).put({
     ...mutation,
     attempts: mutation.attempts + 1,

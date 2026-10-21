@@ -1,0 +1,4 @@
+ALTER TABLE "workspace" DROP CONSTRAINT "workspace_accent_color_check";--> statement-breakpoint
+ALTER TABLE "workspace" DROP CONSTRAINT "workspace_icon_check";--> statement-breakpoint
+ALTER TABLE "workspace" ADD CONSTRAINT "workspace_accent_color_check" CHECK ("workspace"."accent_color" IN ('olive', 'blue', 'terracotta', 'plum', 'teal', 'graphite', 'sage', 'indigo', 'amber', 'rose', 'sky', 'sand'));--> statement-breakpoint
+ALTER TABLE "workspace" ADD CONSTRAINT "workspace_icon_check" CHECK ("workspace"."icon" IN ('briefcase', 'folder', 'layers', 'notebook-pen', 'laptop', 'palette', 'building-2', 'book-open', 'code-2', 'chart-no-axes-combined', 'camera', 'pen-tool'));

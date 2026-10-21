@@ -4,6 +4,9 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig(({ mode }) => {
   const environment = loadEnv(mode, process.cwd(), '')
+  const appVersion = environment.VITE_APP_VERSION?.trim() || process.env.npm_package_version
+
+  if (!appVersion) throw new Error('VITE_APP_VERSION or the package version is required.')
 
   if (mode === 'desktop') {
     const apiUrl = environment.VITE_API_URL?.trim()
@@ -26,6 +29,9 @@ export default defineConfig(({ mode }) => {
   }
 
   return {
+    define: {
+      'import.meta.env.VITE_APP_VERSION': JSON.stringify(appVersion),
+    },
     plugins: [react(), tailwindcss()],
     server: { watch: { ignored: ['**/src-tauri/**'] } },
     build: {

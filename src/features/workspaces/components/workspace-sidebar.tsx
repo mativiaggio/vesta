@@ -1,5 +1,15 @@
 import type { CSSProperties } from 'react'
-import { Check, ChevronDown, LayoutDashboard, LoaderCircle, LogOut, Plus, Settings2, UserRound } from 'lucide-react'
+import {
+  Check,
+  ChevronDown,
+  LayoutDashboard,
+  LoaderCircle,
+  LogOut,
+  Pencil,
+  Plus,
+  Settings2,
+  UserRound,
+} from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,6 +49,7 @@ type WorkspaceSidebarProps = {
   isSaving: boolean
   syncStatus: SyncStatus
   onActivateWorkspace: (workspaceId: string) => void
+  onEditWorkspace: (workspaceId: string) => void
   onLoadMore: () => void
   onCreateWorkspace: () => void
   onNavigateOverview: () => void
@@ -56,6 +67,7 @@ function WorkspaceSwitcher({
   nextCursor,
   isSaving,
   onActivateWorkspace,
+  onEditWorkspace,
   onLoadMore,
   onCreateWorkspace,
 }: Pick<
@@ -69,12 +81,17 @@ function WorkspaceSwitcher({
   | 'nextCursor'
   | 'isSaving'
   | 'onActivateWorkspace'
+  | 'onEditWorkspace'
   | 'onLoadMore'
   | 'onCreateWorkspace'
 >) {
-  const { t } = useLanguage()
-  const { isMobile } = useSidebar()
+  const { t, language } = useLanguage()
+  const { isMobile, setOpenMobile } = useSidebar()
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null
+  const collator = new Intl.Collator(language, { sensitivity: 'base' })
+  const sortedWorkspaces = [...workspaces].sort(
+    (left, right) => collator.compare(left.name, right.name) || left.id.localeCompare(right.id),
+  )
 
   if (isLoading || loadFailed || workspaces.length === 0) return null
 
@@ -100,19 +117,32 @@ function WorkspaceSwitcher({
       </DropdownMenuTrigger>
       <DropdownMenuContent side={isMobile ? 'bottom' : 'right'} align="start" className="workspace-menu">
         <div className="workspace-menu-heading">{t('workspaces', 'yourWorkspaces')}</div>
-        {workspaces.map((workspace) => (
-          <DropdownMenuItem key={workspace.id} onSelect={() => onActivateWorkspace(workspace.id)}>
-            <span className="workspace-menu-option">
-              <span
-                className="workspace-menu-mark"
-                style={{ '--workspace-accent': workspaceAccentColors[workspace.accentColor] } as CSSProperties}
-              >
-                <WorkspaceIconGlyph icon={workspace.icon} size={14} />
+        {sortedWorkspaces.map((workspace) => (
+          <div className="workspace-menu-row" key={workspace.id}>
+            <DropdownMenuItem className="workspace-menu-workspace" onSelect={() => onActivateWorkspace(workspace.id)}>
+              <span className="workspace-menu-option">
+                <span
+                  className="workspace-menu-mark"
+                  style={{ '--workspace-accent': workspaceAccentColors[workspace.accentColor] } as CSSProperties}
+                >
+                  <WorkspaceIconGlyph icon={workspace.icon} size={14} />
+                </span>
+                <span className="workspace-menu-name">{workspace.name}</span>
+                {workspace.id === activeWorkspaceId && <Check size={14} aria-hidden="true" />}
               </span>
-              <span className="workspace-menu-name">{workspace.name}</span>
-              {workspace.id === activeWorkspaceId && <Check size={14} aria-hidden="true" />}
-            </span>
-          </DropdownMenuItem>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="workspace-menu-edit"
+              aria-label={`${t('workspaces', 'editWorkspace')}: ${workspace.name}`}
+              title={`${t('workspaces', 'editWorkspace')}: ${workspace.name}`}
+              onSelect={() => {
+                onEditWorkspace(workspace.id)
+                if (isMobile) setOpenMobile(false)
+              }}
+            >
+              <Pencil size={13} aria-hidden="true" />
+            </DropdownMenuItem>
+          </div>
         ))}
         {nextCursor !== null && (
           <DropdownMenuItem disabled={isLoadingMore} onSelect={onLoadMore}>
@@ -228,18 +258,6 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
       </SidebarContent>
 
       <SidebarFooter className="workspace-sidebar-footer">
-        {props.syncStatus !== 'idle' && (
-          <span
-            className={`workspace-sync-status is-${props.syncStatus}`}
-            role={props.syncStatus === 'error' ? 'alert' : 'status'}
-          >
-            <span className={`workspace-sync-dot is-${props.syncStatus}`} aria-hidden="true" />
-            {t(
-              'workspaces',
-              props.syncStatus === 'syncing' ? 'syncing' : props.syncStatus === 'error' ? 'syncError' : 'savedLocally',
-            )}
-          </span>
-        )}
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton
@@ -257,6 +275,19 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
             <UserMenu userName={props.userName} userEmail={props.userEmail} onSignOut={props.onSignOut} />
           </SidebarMenuItem>
         </SidebarMenu>
+        {props.syncStatus !== 'idle' && (
+          <span
+            className={`workspace-sync-status is-${props.syncStatus}`}
+            role={props.syncStatus === 'error' ? 'alert' : 'status'}
+          >
+            <span className={`workspace-sync-dot is-${props.syncStatus}`} aria-hidden="true" />
+            {t(
+              'workspaces',
+              props.syncStatus === 'syncing' ? 'syncing' : props.syncStatus === 'error' ? 'syncError' : 'savedLocally',
+            )}
+            {props.syncStatus === 'pending' && <span> v{import.meta.env.VITE_APP_VERSION}</span>}
+          </span>
+        )}
       </SidebarFooter>
     </Sidebar>
   )

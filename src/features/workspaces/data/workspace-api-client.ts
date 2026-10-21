@@ -1,9 +1,12 @@
 import {
   workspaceActivationSchema,
+  workspaceDeletionSchema,
   workspaceListSchema,
   workspaceSchema,
   type ActivateWorkspaceMutation,
   type CreateWorkspaceMutation,
+  type DeleteWorkspaceMutation,
+  type UpdateWorkspaceMutation,
 } from '../../../../packages/workspaces/src/contract'
 import { apiBaseUrl } from '../../../config/runtime-api-base-url'
 
@@ -47,6 +50,34 @@ export async function createRemoteWorkspace(input: CreateWorkspaceMutation, sign
   return workspaceSchema.parse(
     typeof payload === 'object' && payload !== null && 'workspace' in payload ? payload.workspace : null,
   )
+}
+
+export async function updateRemoteWorkspace(workspaceId: string, input: UpdateWorkspaceMutation, signal?: AbortSignal) {
+  const payload = await parseResponse(
+    await fetch(new URL(`/api/workspaces/${encodeURIComponent(workspaceId)}`, apiBaseUrl), {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+      signal,
+    }),
+  )
+  return workspaceSchema.parse(
+    typeof payload === 'object' && payload !== null && 'workspace' in payload ? payload.workspace : null,
+  )
+}
+
+export async function deleteRemoteWorkspace(workspaceId: string, input: DeleteWorkspaceMutation, signal?: AbortSignal) {
+  const payload = await parseResponse(
+    await fetch(new URL(`/api/workspaces/${encodeURIComponent(workspaceId)}`, apiBaseUrl), {
+      method: 'DELETE',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+      signal,
+    }),
+  )
+  return workspaceDeletionSchema.parse(payload)
 }
 
 export async function activateRemoteWorkspace(

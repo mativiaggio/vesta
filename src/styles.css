@@ -569,7 +569,12 @@ input {
   --border: #e4e3de;
   --border-strong: #c8c6be;
   --subtle: #f4f3ef;
+  --button: #333330;
+  --button-hover: #484844;
+  --button-foreground: #fff;
   --focus: #7d8469;
+  --focus-ring: rgb(125 132 105 / 22%);
+  --destructive: #9b342e;
   --sidebar-muted: var(--muted-foreground);
   --sidebar-foreground: var(--foreground);
   --sidebar-hover: var(--subtle);
@@ -592,7 +597,12 @@ input {
   --border: #494843;
   --border-strong: #68665f;
   --subtle: #2d2d2a;
+  --button: #e9e8e2;
+  --button-hover: #d5d4ce;
+  --button-foreground: #262623;
   --focus: #bfc3a8;
+  --focus-ring: rgb(190 195 168 / 22%);
+  --destructive: #ff9b91;
 }
 .settings-dialog-header {
   display: flex;
@@ -602,6 +612,12 @@ input {
   gap: 20px;
   padding: 15px 19px;
   border-bottom: 1px solid var(--border);
+}
+.workspace-settings-title-copy {
+  min-width: 0;
+}
+.workspace-settings-title-copy .dialog-title span {
+  overflow-wrap: anywhere;
 }
 .settings-dialog .dialog-title {
   margin: 0;
@@ -655,6 +671,14 @@ input {
   gap: 9px;
   padding-inline: 9px;
   font-size: 12px;
+}
+.settings-sidebar .sidebar-menu-button.workspace-settings-danger-button {
+  color: var(--destructive);
+}
+.settings-sidebar .sidebar-menu-button.workspace-settings-danger-button:hover:not(:disabled),
+.settings-sidebar .sidebar-menu-button.workspace-settings-danger-button.is-active {
+  background: color-mix(in srgb, var(--destructive) 16%, var(--surface));
+  color: var(--destructive);
 }
 .settings-panel {
   min-width: 0;
@@ -1080,11 +1104,14 @@ input {
   display: flex;
   min-height: 18px;
   align-items: center;
+  justify-content: center;
   gap: 7px;
   padding-inline: 4px;
   color: var(--sidebar-muted);
+  opacity: 50%;
   font-size: 10px;
   white-space: nowrap;
+  user-select: none;
 }
 .workspace-sync-status.is-error {
   color: var(--destructive);
@@ -1094,7 +1121,7 @@ input {
   height: 6px;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: var(--sidebar-muted);
+  background: var(--color-green-600);
 }
 .workspace-sync-dot.is-syncing {
   background: #83916a;
@@ -1227,6 +1254,30 @@ input {
   align-items: center;
   gap: 9px;
 }
+.workspace-menu-row {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 2px 0;
+}
+.workspace-menu-workspace {
+  min-width: 0;
+  flex: 1;
+  justify-content: flex-start;
+  padding-inline: 7px;
+}
+.workspace-menu-edit {
+  width: 30px;
+  min-width: 30px;
+  flex: 0 0 30px;
+  justify-content: center;
+  padding-inline: 0;
+  color: #aaa8a1;
+}
+.workspace-menu-edit:hover,
+.workspace-menu-edit:focus-visible {
+  color: #f0efeb;
+}
 .workspace-menu-mark {
   width: 24px;
   height: 24px;
@@ -1346,9 +1397,10 @@ input {
 }
 .workspace-color-options,
 .workspace-icon-options {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(6, 40px);
   align-items: center;
+  justify-items: center;
   gap: 9px;
 }
 .workspace-color-option,
@@ -1444,6 +1496,86 @@ input {
   color: var(--destructive);
   font-size: 12px;
   line-height: 1.5;
+}
+.workspace-settings-form {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  gap: 20px;
+}
+.workspace-settings-field {
+  display: flex;
+  max-width: 420px;
+  flex-direction: column;
+  gap: 7px;
+}
+.workspace-settings-field label {
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 560;
+}
+.workspace-settings-field input {
+  height: 39px;
+}
+.workspace-settings-field input[aria-invalid='true'] {
+  border-color: var(--destructive);
+}
+.workspace-settings-field-error,
+.workspace-settings-error {
+  color: var(--destructive);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.workspace-settings-appearance {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.workspace-settings-danger {
+  min-height: 100%;
+}
+.workspace-settings-danger-challenge {
+  display: flex;
+  max-width: 420px;
+  flex-direction: column;
+  gap: 10px;
+}
+.workspace-settings-danger-challenge > p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.workspace-settings-danger-challenge > .workspace-settings-danger-name {
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 620;
+  overflow-wrap: anywhere;
+}
+.workspace-danger-delete-action {
+  background: var(--destructive);
+  color: var(--surface);
+}
+.workspace-danger-delete-action:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--destructive) 88%, var(--foreground));
+  color: var(--surface);
+}
+.workspace-danger-delete-action:disabled {
+  border: 1px solid color-mix(in srgb, var(--destructive) 25%, var(--border));
+  background: color-mix(in srgb, var(--destructive) 10%, var(--surface));
+  color: var(--destructive);
+  opacity: 1;
+}
+.workspace-settings-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: auto;
+  padding-top: 15px;
+  border-top: 1px solid var(--border);
+}
+.workspace-settings-footer button {
+  min-height: 36px;
+  padding-inline: 13px;
 }
 .workspace-create-submit {
   width: 100%;

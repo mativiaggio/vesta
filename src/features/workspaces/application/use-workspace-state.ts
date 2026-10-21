@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   CreateWorkspaceMutation,
+  DeleteWorkspaceMutation,
+  UpdateWorkspaceMutation,
   Workspace,
   WorkspaceAccent,
   WorkspaceIcon,
@@ -9,6 +11,8 @@ import { fetchWorkspacePage } from '../data/workspace-api-client'
 import {
   enqueueWorkspaceActivation,
   enqueueWorkspaceCreation,
+  enqueueWorkspaceDeletion,
+  enqueueWorkspaceUpdate,
   loadLocalWorkspaceState,
   mergeWorkspacePage,
 } from '../data/workspace-local-store'
@@ -165,6 +169,56 @@ export function useWorkspaceState(userId: string) {
     }
   }
 
+  async function update(
+    workspaceId: string,
+    input: Omit<UpdateWorkspaceMutation, 'clientMutationId'>,
+  ): Promise<boolean> {
+    const workspace = workspaces.find((item) => item.id === workspaceId)
+    if (!workspace) return false
+
+    setSaveFailed(false)
+    setIsSaving(true)
+    const mutation: UpdateWorkspaceMutation = {
+      ...input,
+      clientMutationId: crypto.randomUUID(),
+    }
+    try {
+      await enqueueWorkspaceUpdate(userId, workspaceId, mutation)
+      await refreshLocalState()
+      void synchronize()
+      return true
+    } catch {
+      setSaveFailed(true)
+      return false
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  async function removeWorkspace(
+    workspaceId: string,
+    input: Omit<DeleteWorkspaceMutation, 'clientMutationId'>,
+  ): Promise<boolean> {
+    const workspace = workspaces.find((item) => item.id === workspaceId)
+    if (!workspace || input.confirmationName !== workspace.name) return false
+
+    setIsSaving(true)
+    try {
+      const mutation: DeleteWorkspaceMutation = {
+        ...input,
+        clientMutationId: crypto.randomUUID(),
+      }
+      await enqueueWorkspaceDeletion(userId, workspaceId, mutation)
+      await refreshLocalState()
+      void synchronize()
+      return true
+    } catch {
+      return false
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
   return {
     workspaces,
     activeWorkspaceId,
@@ -179,6 +233,8 @@ export function useWorkspaceState(userId: string) {
     loadMore,
     activate,
     create,
+    update,
+    removeWorkspace,
     retry: refreshFromServer,
   }
 }

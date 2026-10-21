@@ -1,7 +1,14 @@
-import { activateRemoteWorkspace, createRemoteWorkspace, WorkspaceApiError } from '../data/workspace-api-client'
+import {
+  activateRemoteWorkspace,
+  createRemoteWorkspace,
+  deleteRemoteWorkspace,
+  updateRemoteWorkspace,
+  WorkspaceApiError,
+} from '../data/workspace-api-client'
 import {
   completeActivationMutation,
   completeWorkspaceMutation,
+  completeWorkspaceDeletionMutation,
   listPendingWorkspaceMutations,
   recordWorkspaceMutationFailure,
 } from '../data/workspace-local-store'
@@ -22,9 +29,15 @@ export async function syncPendingWorkspaceMutations(
       if (mutation.kind === 'workspace.create') {
         const workspace = await createRemoteWorkspace(mutation.payload, signal)
         await completeWorkspaceMutation(mutation, workspace)
-      } else {
+      } else if (mutation.kind === 'workspace.activate') {
         const activation = await activateRemoteWorkspace(mutation.workspaceId, mutation.payload, signal)
         await completeActivationMutation(mutation, activation)
+      } else if (mutation.kind === 'workspace.delete') {
+        const deletion = await deleteRemoteWorkspace(mutation.workspaceId, mutation.payload, signal)
+        await completeWorkspaceDeletionMutation(mutation, deletion.deletedAt)
+      } else {
+        const workspace = await updateRemoteWorkspace(mutation.workspaceId, mutation.payload, signal)
+        await completeWorkspaceMutation(mutation, workspace)
       }
       pendingCount -= 1
     } catch (error) {

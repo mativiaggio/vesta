@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type FormEvent } from 'react'
-import { ArrowLeft, Check, LoaderCircle, Plus, RotateCw } from 'lucide-react'
+import { ArrowLeft, LoaderCircle, Plus, RotateCw } from 'lucide-react'
 import { Button } from '../../../components/ui/button'
 import { Input } from '../../../components/ui/input'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '../../../components/ui/sidebar'
@@ -7,13 +7,13 @@ import { useLanguage } from '../../localization/language-context'
 import type { Theme } from '../../preferences/theme-preference'
 import { useWorkspaceState } from '../application/use-workspace-state'
 import { SettingsDialog } from '../../settings/components/settings-dialog'
+import { WorkspaceSettingsDialog } from './workspace-settings-dialog'
 import { WorkspaceIconGlyph } from './workspace-icon'
+import { WorkspaceAppearanceFields } from './workspace-appearance-fields'
 import { workspaceAccentColors } from './workspace-theme'
 import { WorkspaceSidebar } from './workspace-sidebar'
 import {
   createWorkspaceSchema,
-  workspaceAccents,
-  workspaceIcons,
   type WorkspaceAccent,
   type WorkspaceIcon,
 } from '../../../../packages/workspaces/src/contract'
@@ -50,16 +50,20 @@ export function WorkspaceExperience({
     loadMore,
     activate,
     create,
+    update,
+    removeWorkspace,
     retry,
   } = useWorkspaceState(userId)
   const [isCreating, setIsCreating] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null)
   const [name, setName] = useState('')
   const [accentColor, setAccentColor] = useState<WorkspaceAccent>('olive')
   const [icon, setIcon] = useState<WorkspaceIcon>('briefcase')
   const [nameError, setNameError] = useState(false)
 
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? null
+  const editingWorkspace = workspaces.find((workspace) => workspace.id === editingWorkspaceId) ?? null
   const showCreateForm = isCreating || (!isLoading && workspaces.length === 0)
   const isFirstWorkspace = showCreateForm && workspaces.length === 0
 
@@ -106,6 +110,7 @@ export function WorkspaceExperience({
           onActivateWorkspace={(workspaceId) => {
             void activateWorkspace(workspaceId)
           }}
+          onEditWorkspace={setEditingWorkspaceId}
           onLoadMore={() => {
             void loadMore()
           }}
@@ -186,49 +191,12 @@ export function WorkspaceExperience({
                 )}
               </div>
 
-              <fieldset className="workspace-choice-group">
-                <legend>{t('workspaces', 'accentColor')}</legend>
-                <div className="workspace-color-options">
-                  {workspaceAccents.map((color) => (
-                    <button
-                      key={color}
-                      className={`workspace-color-option${accentColor === color ? ' is-selected' : ''}`}
-                      type="button"
-                      aria-label={t('workspaces', color)}
-                      aria-pressed={accentColor === color}
-                      title={t('workspaces', color)}
-                      onClick={() => setAccentColor(color)}
-                    >
-                      <span style={{ backgroundColor: workspaceAccentColors[color] }} />
-                      {accentColor === color && <Check size={13} aria-hidden="true" />}
-                    </button>
-                  ))}
-                </div>
-              </fieldset>
-
-              <fieldset
-                className="workspace-choice-group workspace-icon-group"
-                style={{ '--workspace-accent': workspaceAccentColors[accentColor] } as CSSProperties}
-              >
-                <legend>{t('workspaces', 'identifyWith')}</legend>
-                <div className="workspace-icon-options">
-                  {workspaceIcons.map((iconOption) => {
-                    return (
-                      <button
-                        key={iconOption}
-                        className={`workspace-icon-option${icon === iconOption ? ' is-selected' : ''}`}
-                        type="button"
-                        aria-label={t('workspaces', iconOption)}
-                        aria-pressed={icon === iconOption}
-                        title={t('workspaces', iconOption)}
-                        onClick={() => setIcon(iconOption)}
-                      >
-                        <WorkspaceIconGlyph icon={iconOption} size={18} />
-                      </button>
-                    )
-                  })}
-                </div>
-              </fieldset>
+              <WorkspaceAppearanceFields
+                accentColor={accentColor}
+                icon={icon}
+                onAccentColorChange={setAccentColor}
+                onIconChange={setIcon}
+              />
 
               <div className="workspace-preview-label">{t('workspaces', 'preview')}</div>
               <div
@@ -286,6 +254,18 @@ export function WorkspaceExperience({
         onOpenChange={setIsSettingsOpen}
         theme={theme}
         onThemeChange={onThemeChange}
+      />
+      <WorkspaceSettingsDialog
+        key={editingWorkspaceId ?? 'closed'}
+        open={editingWorkspaceId !== null && editingWorkspace !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingWorkspaceId(null)
+        }}
+        workspace={editingWorkspace}
+        theme={theme}
+        isSaving={isSaving}
+        onSave={update}
+        onDelete={removeWorkspace}
       />
     </SidebarProvider>
   )

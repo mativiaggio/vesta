@@ -6,7 +6,13 @@ import { createRequireWorkspaceMutationRateLimit } from '../middleware/require-w
 import type { MutationRateLimiter } from '../rate-limit/mutation-rate-limiter.js'
 import { activateWorkspaceMutationSchema } from '../../../../packages/workspaces/src/contract.js'
 import { decodeWorkspaceCursor } from './application/workspace-cursor.js'
-import { activateWorkspace, createWorkspace, listWorkspaces } from './application/workspace-service.js'
+import {
+  activateWorkspace,
+  createWorkspace,
+  deleteWorkspace,
+  listWorkspaces,
+  updateWorkspace,
+} from './application/workspace-service.js'
 
 export function createWorkspaceRoutes(rateLimiter: MutationRateLimiter) {
   const workspaceRoutes = new Hono<AuthEnvironment>()
@@ -65,6 +71,50 @@ export function createWorkspaceRoutes(rateLimiter: MutationRateLimiter) {
     }
 
     return context.json({ activation: result.activation })
+  })
+
+  workspaceRoutes.patch('/:workspaceId', async (context) => {
+    const { user } = context.get('authSession')
+    let body: unknown
+    try {
+      body = await context.req.json()
+    } catch {
+      return context.json({ error: 'Invalid request body.' }, 400)
+    }
+
+    const result = await updateWorkspace(user.id, context.req.param('workspaceId'), body)
+    if (result.kind === 'invalid') return context.json({ error: 'Invalid workspace details.' }, 400)
+    if (result.kind === 'not-found') return context.json({ error: 'Workspace not found.' }, 404)
+    if (result.kind === 'conflict')
+      return context.json({ error: 'Workspace mutation conflicts with existing data.' }, 409)
+    if (result.kind === 'capacity') {
+      context.header('Retry-After', '3600')
+      return context.json({ error: 'Workspace synchronization is temporarily at capacity.' }, 503)
+    }
+
+    return context.json({ workspace: result.workspace })
+  })
+
+  workspaceRoutes.delete('/:workspaceId', async (context) => {
+    const { user } = context.get('authSession')
+    let body: unknown
+    try {
+      body = await context.req.json()
+    } catch {
+      return context.json({ error: 'Invalid request body.' }, 400)
+    }
+
+    const result = await deleteWorkspace(user.id, context.req.param('workspaceId'), body)
+    if (result.kind === 'invalid') return context.json({ error: 'Invalid workspace deletion confirmation.' }, 400)
+    if (result.kind === 'not-found') return context.json({ error: 'Workspace not found.' }, 404)
+    if (result.kind === 'conflict')
+      return context.json({ error: 'Workspace mutation conflicts with existing data.' }, 409)
+    if (result.kind === 'capacity') {
+      context.header('Retry-After', '3600')
+      return context.json({ error: 'Workspace synchronization is temporarily at capacity.' }, 503)
+    }
+
+    return context.json({ deletedAt: result.deletedAt })
   })
 
   return workspaceRoutes
