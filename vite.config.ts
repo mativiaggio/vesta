@@ -10,21 +10,21 @@ export default defineConfig(({ mode }) => {
 
   if (mode === 'desktop') {
     const apiUrl = environment.VITE_API_URL?.trim()
-    if (!apiUrl) throw new Error('VITE_API_URL is required for packaged desktop builds.')
-
-    const parsedApiUrl = new URL(apiUrl)
-    const isLocalDevelopmentUrl = parsedApiUrl.hostname === 'localhost' || parsedApiUrl.hostname === '127.0.0.1'
-    if (parsedApiUrl.protocol !== 'https:' && !isLocalDevelopmentUrl) {
-      throw new Error('Desktop API URLs must use HTTPS unless they target localhost.')
-    }
-    if (
-      parsedApiUrl.pathname !== '/' ||
-      parsedApiUrl.search ||
-      parsedApiUrl.hash ||
-      parsedApiUrl.username ||
-      parsedApiUrl.password
-    ) {
-      throw new Error('VITE_API_URL must be an origin without credentials, a path, a query, or a fragment.')
+    if (apiUrl) {
+      const parsedApiUrl = new URL(apiUrl)
+      const isLocalDevelopmentUrl = parsedApiUrl.hostname === 'localhost' || parsedApiUrl.hostname === '127.0.0.1'
+      if (parsedApiUrl.protocol !== 'https:' && !isLocalDevelopmentUrl) {
+        throw new Error('Desktop API URLs must use HTTPS unless they target localhost.')
+      }
+      if (
+        parsedApiUrl.pathname !== '/' ||
+        parsedApiUrl.search ||
+        parsedApiUrl.hash ||
+        parsedApiUrl.username ||
+        parsedApiUrl.password
+      ) {
+        throw new Error('VITE_API_URL must be an origin without credentials, a path, a query, or a fragment.')
+      }
     }
   }
 

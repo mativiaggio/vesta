@@ -2,6 +2,28 @@ const databaseName = 'vesta-preferences'
 const storeName = 'preferences'
 let databasePromise: Promise<IDBDatabase> | null = null
 
+export type PreferenceStorageAdapter = {
+  read: (key: string) => Promise<unknown>
+  write: (key: string, value: string) => Promise<void>
+}
+
+let configuredAdapter: PreferenceStorageAdapter | null = null
+
+export function configurePreferenceStorage(adapter: PreferenceStorageAdapter | null): void {
+  configuredAdapter = adapter
+}
+
+export function createMemoryPreferenceStorage(): PreferenceStorageAdapter {
+  const values = new Map<string, string>()
+  return {
+    read: (key) => Promise.resolve(values.get(key)),
+    write: (key, value) => {
+      values.set(key, value)
+      return Promise.resolve()
+    },
+  }
+}
+
 function requestResult<T>(request: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
     request.addEventListener('success', () => resolve(request.result), { once: true })
@@ -52,6 +74,7 @@ function openDatabase(): Promise<IDBDatabase> {
 }
 
 export async function readPreference(key: string): Promise<unknown> {
+  if (configuredAdapter) return configuredAdapter.read(key)
   const database = await openDatabase()
   const transaction = database.transaction(storeName, 'readonly')
   const value: unknown = await requestResult<unknown>(transaction.objectStore(storeName).get(key))
@@ -60,6 +83,10 @@ export async function readPreference(key: string): Promise<unknown> {
 }
 
 export async function writePreference(key: string, value: string): Promise<void> {
+  if (configuredAdapter) {
+    await configuredAdapter.write(key, value)
+    return
+  }
   const database = await openDatabase()
   const transaction = database.transaction(storeName, 'readwrite')
   transaction.objectStore(storeName).put(value, key)

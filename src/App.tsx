@@ -7,6 +7,7 @@ import {
   type CachedIdentity,
 } from './features/auth/data/cached-identity'
 import { useLanguage } from './features/localization/language-context'
+import { useDesktopSetup } from './features/deployment/components/desktop-setup-context'
 import {
   loadThemePreference,
   readThemePreference,
@@ -25,7 +26,7 @@ const WorkspaceExperience = lazy(() =>
   })),
 )
 
-export default function App() {
+function ConnectedApplication() {
   const { data: session, error: sessionError, isPending: isSessionPending, refetch } = authClient.useSession()
   const { t } = useLanguage()
   const [theme, setTheme] = useState<Theme>(readThemePreference)
@@ -130,7 +131,8 @@ export default function App() {
         <WorkspaceExperience
           userId={user.id}
           userName={user.name}
-          userEmail={user.email}
+          userDetail={user.email}
+          storageMode="server"
           theme={theme}
           onThemeChange={setTheme}
           onSignOut={() => {
@@ -148,4 +150,57 @@ export default function App() {
       <AuthExperience theme={theme} onToggleTheme={toggleTheme} />
     </Suspense>
   )
+}
+
+function LocalDesktopApplication() {
+  const { t } = useLanguage()
+  const [theme, setTheme] = useState<Theme>(readThemePreference)
+  const [isThemePreferenceLoaded, setIsThemePreferenceLoaded] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    void loadThemePreference()
+      .then((storedTheme) => {
+        if (active) setTheme(storedTheme)
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setIsThemePreferenceLoaded(true)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (isThemePreferenceLoaded) void saveThemePreference(theme)
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute('content', theme === 'light' ? '#f8f8f6' : '#20201e')
+  }, [isThemePreferenceLoaded, theme])
+
+  return (
+    <Suspense
+      fallback={
+        <main className={`session-loading theme-${theme}`} role="status">
+          <span className="visually-hidden">{t('app', 'opening')}</span>
+        </main>
+      }
+    >
+      <WorkspaceExperience
+        userId="local"
+        userName={t('deployment', 'localProfile')}
+        userDetail={t('deployment', 'localDataLabel')}
+        storageMode="local"
+        theme={theme}
+        onThemeChange={setTheme}
+      />
+    </Suspense>
+  )
+}
+
+export default function App() {
+  const desktopSetup = useDesktopSetup()
+  if (desktopSetup?.mode === 'self-managed') return <LocalDesktopApplication />
+  return <ConnectedApplication />
 }

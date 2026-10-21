@@ -5,7 +5,7 @@ import { Input } from '../../../components/ui/input'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '../../../components/ui/sidebar'
 import { useLanguage } from '../../localization/language-context'
 import type { Theme } from '../../preferences/theme-preference'
-import { useWorkspaceState } from '../application/use-workspace-state'
+import { useWorkspaceState, type WorkspaceStorageMode } from '../application/use-workspace-state'
 import { SettingsDialog } from '../../settings/components/settings-dialog'
 import { WorkspaceSettingsDialog } from './workspace-settings-dialog'
 import { WorkspaceIconGlyph } from './workspace-icon'
@@ -21,8 +21,9 @@ import {
 type WorkspaceExperienceProps = {
   userId: string
   userName: string
-  userEmail: string
-  onSignOut: () => void
+  userDetail: string
+  storageMode: WorkspaceStorageMode
+  onSignOut?: () => void
   theme: Theme
   onThemeChange: (theme: Theme) => void
 }
@@ -30,7 +31,8 @@ type WorkspaceExperienceProps = {
 export function WorkspaceExperience({
   userId,
   userName,
-  userEmail,
+  userDetail,
+  storageMode,
   onSignOut,
   theme,
   onThemeChange,
@@ -53,7 +55,7 @@ export function WorkspaceExperience({
     update,
     removeWorkspace,
     retry,
-  } = useWorkspaceState(userId)
+  } = useWorkspaceState(userId, storageMode)
   const [isCreating, setIsCreating] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null)
@@ -96,7 +98,7 @@ export function WorkspaceExperience({
       {!isFirstWorkspace && (
         <WorkspaceSidebar
           userName={userName}
-          userEmail={userEmail}
+          userDetail={userDetail}
           workspaces={workspaces}
           activeWorkspaceId={activeWorkspaceId}
           isLoading={isLoading}
@@ -106,6 +108,7 @@ export function WorkspaceExperience({
           nextCursor={nextCursor}
           isSaving={isSaving}
           syncStatus={syncStatus}
+          storageMode={storageMode}
           onOpenSettings={() => setIsSettingsOpen(true)}
           onActivateWorkspace={(workspaceId) => {
             void activateWorkspace(workspaceId)
@@ -125,7 +128,7 @@ export function WorkspaceExperience({
         )}
         {saveFailed && !showCreateForm && (
           <p className="workspace-global-error" role="alert">
-            {t('workspaces', 'activationFailed')}
+            {t('workspaces', storageMode === 'local' ? 'localSaveFailed' : 'activationFailed')}
           </p>
         )}
 
@@ -136,8 +139,8 @@ export function WorkspaceExperience({
           </div>
         ) : loadFailed ? (
           <section className="workspace-message-state" role="alert">
-            <h1>{t('workspaces', 'couldNotLoad')}</h1>
-            <p>{t('workspaces', 'connectionHelp')}</p>
+            <h1>{t('workspaces', storageMode === 'local' ? 'localCouldNotLoad' : 'couldNotLoad')}</h1>
+            <p>{t('workspaces', storageMode === 'local' ? 'localStorageHelp' : 'connectionHelp')}</p>
             <Button
               type="button"
               onClick={() => {
@@ -212,7 +215,7 @@ export function WorkspaceExperience({
 
               {saveFailed && (
                 <p className="workspace-save-error" role="alert">
-                  {t('workspaces', 'saveFailed')}
+                  {t('workspaces', storageMode === 'local' ? 'localSaveFailed' : 'saveFailed')}
                 </p>
               )}
               <Button className="workspace-create-submit" type="submit" disabled={isSaving}>

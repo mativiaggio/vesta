@@ -7,6 +7,13 @@ import type {
   WorkspaceAccent,
   WorkspaceIcon,
 } from '../../../../packages/workspaces/src/contract'
+import {
+  activateLocalDesktopWorkspace,
+  createLocalDesktopWorkspace,
+  deleteLocalDesktopWorkspace,
+  loadLocalDesktopWorkspaceState,
+  updateLocalDesktopWorkspace,
+} from '../data/local-desktop-workspace-client'
 import { fetchWorkspacePage } from '../data/workspace-api-client'
 import {
   enqueueWorkspaceActivation,
@@ -18,9 +25,19 @@ import {
 } from '../data/workspace-local-store'
 import { syncPendingWorkspaceMutations } from './workspace-sync'
 
+export type WorkspaceStorageMode = 'server' | 'local'
 export type WorkspaceSyncStatus = 'idle' | 'syncing' | 'pending' | 'error'
 
-export function useWorkspaceState(userId: string) {
+type WorkspaceStateSnapshot = {
+  workspaces: Workspace[]
+  activeWorkspaceId: string | null
+  nextCursor: string | null
+  pendingCount: number
+  hasFailedMutations: boolean
+  hasLocalData: boolean
+}
+
+export function useWorkspaceState(userId: string, storageMode: WorkspaceStorageMode = 'server') {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -34,17 +51,40 @@ export function useWorkspaceState(userId: string) {
   const isMounted = useRef(true)
   const syncPromise = useRef<Promise<void> | null>(null)
 
-  const refreshLocalState = useCallback(async () => {
-    const state = await loadLocalWorkspaceState(userId)
-    if (!isMounted.current) return state
+  const applyLocalDesktopState = useCallback((state: Awaited<ReturnType<typeof loadLocalDesktopWorkspaceState>>) => {
+    if (!isMounted.current) return
     setWorkspaces(state.workspaces)
     setActiveWorkspaceId(state.activeWorkspaceId)
-    setNextCursor(state.nextCursor)
-    setSyncStatus(state.hasFailedMutations ? 'error' : state.pendingCount > 0 ? 'pending' : 'idle')
-    return state
-  }, [userId])
+    setNextCursor(null)
+    setSyncStatus('idle')
+  }, [])
+
+  const refreshLocalState = useCallback(async (): Promise<WorkspaceStateSnapshot> => {
+    let snapshot: WorkspaceStateSnapshot
+    if (storageMode === 'local') {
+      const state = await loadLocalDesktopWorkspaceState()
+      snapshot = {
+        workspaces: state.workspaces,
+        activeWorkspaceId: state.activeWorkspaceId,
+        nextCursor: null,
+        pendingCount: 0,
+        hasFailedMutations: false,
+        hasLocalData: state.workspaces.length > 0,
+      }
+    } else {
+      snapshot = await loadLocalWorkspaceState(userId)
+    }
+
+    if (!isMounted.current) return snapshot
+    setWorkspaces(snapshot.workspaces)
+    setActiveWorkspaceId(snapshot.activeWorkspaceId)
+    setNextCursor(snapshot.nextCursor)
+    setSyncStatus(snapshot.hasFailedMutations ? 'error' : snapshot.pendingCount > 0 ? 'pending' : 'idle')
+    return snapshot
+  }, [storageMode, userId])
 
   const synchronize = useCallback(() => {
+    if (storageMode === 'local') return refreshLocalState().then(() => undefined)
     if (syncPromise.current) return syncPromise.current
     const operation = (async () => {
       if (!navigator.onLine) {
@@ -66,15 +106,19 @@ export function useWorkspaceState(userId: string) {
       })
     syncPromise.current = operation
     return operation
-  }, [refreshLocalState, userId])
+  }, [refreshLocalState, storageMode, userId])
 
   const refreshFromServer = useCallback(
     async (signal?: AbortSignal) => {
+      if (storageMode === 'local') {
+        await refreshLocalState()
+        return
+      }
       const page = await fetchWorkspacePage(null, signal)
       await mergeWorkspacePage(userId, page, true)
       await refreshLocalState()
     },
-    [refreshLocalState, userId],
+    [refreshLocalState, storageMode, userId],
   )
 
   useEffect(() => {
@@ -87,6 +131,7 @@ export function useWorkspaceState(userId: string) {
       try {
         const localState = await refreshLocalState()
         if (localState.hasLocalData && isMounted.current) setIsLoading(false)
+        if (storageMode === 'local') return
         if (navigator.onLine) {
           await synchronize()
           await refreshFromServer(controller.signal)
@@ -94,14 +139,19 @@ export function useWorkspaceState(userId: string) {
           setLoadFailed(true)
         }
       } catch {
-        const localState = await loadLocalWorkspaceState(userId).catch(() => null)
-        if (isMounted.current && !localState?.hasLocalData) setLoadFailed(true)
+        if (storageMode === 'local') {
+          if (isMounted.current) setLoadFailed(true)
+        } else {
+          const localState = await loadLocalWorkspaceState(userId).catch(() => null)
+          if (isMounted.current && !localState?.hasLocalData) setLoadFailed(true)
+        }
       } finally {
         if (isMounted.current) setIsLoading(false)
       }
     }
 
     function handleOnline() {
+      if (storageMode === 'local') return
       void synchronize().then(() => refreshFromServer())
     }
 
@@ -112,10 +162,10 @@ export function useWorkspaceState(userId: string) {
       controller.abort()
       window.removeEventListener('online', handleOnline)
     }
-  }, [refreshFromServer, refreshLocalState, synchronize, userId])
+  }, [refreshFromServer, refreshLocalState, storageMode, synchronize, userId])
 
   async function loadMore() {
-    if (!nextCursor || isLoadingMore) return
+    if (storageMode === 'local' || !nextCursor || isLoadingMore) return
     setIsLoadingMore(true)
     setLoadMoreFailed(false)
     try {
@@ -133,12 +183,16 @@ export function useWorkspaceState(userId: string) {
     setSaveFailed(false)
     setIsSaving(true)
     try {
-      await enqueueWorkspaceActivation(userId, workspaceId, {
-        clientMutationId: crypto.randomUUID(),
-        accessedAt: new Date().toISOString(),
-      })
-      await refreshLocalState()
-      void synchronize()
+      if (storageMode === 'local') {
+        applyLocalDesktopState(await activateLocalDesktopWorkspace(workspaceId))
+      } else {
+        await enqueueWorkspaceActivation(userId, workspaceId, {
+          clientMutationId: crypto.randomUUID(),
+          accessedAt: new Date().toISOString(),
+        })
+        await refreshLocalState()
+        void synchronize()
+      }
       return true
     } catch {
       setSaveFailed(true)
@@ -157,9 +211,19 @@ export function useWorkspaceState(userId: string) {
       clientMutationId: crypto.randomUUID(),
     }
     try {
-      await enqueueWorkspaceCreation(userId, mutation)
-      await refreshLocalState()
-      void synchronize()
+      if (storageMode === 'local') {
+        const localInput = {
+          id: mutation.id,
+          name: mutation.name,
+          accentColor: mutation.accentColor,
+          icon: mutation.icon,
+        }
+        applyLocalDesktopState(await createLocalDesktopWorkspace(localInput))
+      } else {
+        await enqueueWorkspaceCreation(userId, mutation)
+        await refreshLocalState()
+        void synchronize()
+      }
       return true
     } catch {
       setSaveFailed(true)
@@ -178,14 +242,18 @@ export function useWorkspaceState(userId: string) {
 
     setSaveFailed(false)
     setIsSaving(true)
-    const mutation: UpdateWorkspaceMutation = {
-      ...input,
-      clientMutationId: crypto.randomUUID(),
-    }
     try {
-      await enqueueWorkspaceUpdate(userId, workspaceId, mutation)
-      await refreshLocalState()
-      void synchronize()
+      if (storageMode === 'local') {
+        applyLocalDesktopState(await updateLocalDesktopWorkspace(workspaceId, input))
+      } else {
+        const mutation: UpdateWorkspaceMutation = {
+          ...input,
+          clientMutationId: crypto.randomUUID(),
+        }
+        await enqueueWorkspaceUpdate(userId, workspaceId, mutation)
+        await refreshLocalState()
+        void synchronize()
+      }
       return true
     } catch {
       setSaveFailed(true)
@@ -203,16 +271,22 @@ export function useWorkspaceState(userId: string) {
     if (!workspace || input.confirmationName !== workspace.name) return false
 
     setIsSaving(true)
+    setSaveFailed(false)
     try {
-      const mutation: DeleteWorkspaceMutation = {
-        ...input,
-        clientMutationId: crypto.randomUUID(),
+      if (storageMode === 'local') {
+        applyLocalDesktopState(await deleteLocalDesktopWorkspace(workspaceId, input.confirmationName))
+      } else {
+        const mutation: DeleteWorkspaceMutation = {
+          ...input,
+          clientMutationId: crypto.randomUUID(),
+        }
+        await enqueueWorkspaceDeletion(userId, workspaceId, mutation)
+        await refreshLocalState()
+        void synchronize()
       }
-      await enqueueWorkspaceDeletion(userId, workspaceId, mutation)
-      await refreshLocalState()
-      void synchronize()
       return true
     } catch {
+      setSaveFailed(true)
       return false
     } finally {
       setIsSaving(false)

@@ -29,7 +29,7 @@ import {
 } from '../../../components/ui/sidebar'
 import { useSidebar } from '../../../components/ui/sidebar-context'
 import { useLanguage } from '../../localization/language-context'
-import type { useWorkspaceState } from '../application/use-workspace-state'
+import type { WorkspaceStorageMode, useWorkspaceState } from '../application/use-workspace-state'
 import { WorkspaceIconGlyph } from './workspace-icon'
 import { workspaceAccentColors } from './workspace-theme'
 
@@ -38,7 +38,7 @@ type SyncStatus = ReturnType<typeof useWorkspaceState>['syncStatus']
 
 type WorkspaceSidebarProps = {
   userName: string
-  userEmail: string
+  userDetail: string
   workspaces: Workspace[]
   activeWorkspaceId: string | null
   isLoading: boolean
@@ -48,13 +48,14 @@ type WorkspaceSidebarProps = {
   nextCursor: string | null
   isSaving: boolean
   syncStatus: SyncStatus
+  storageMode: WorkspaceStorageMode
   onActivateWorkspace: (workspaceId: string) => void
   onEditWorkspace: (workspaceId: string) => void
   onLoadMore: () => void
   onCreateWorkspace: () => void
   onNavigateOverview: () => void
   onOpenSettings: () => void
-  onSignOut: () => void
+  onSignOut?: () => void
 }
 
 function WorkspaceSwitcher({
@@ -200,23 +201,38 @@ function PrimaryNavigation({ onNavigateOverview }: Pick<WorkspaceSidebarProps, '
 
 function UserMenu({
   userName,
-  userEmail,
+  userDetail,
   onSignOut,
-}: Pick<WorkspaceSidebarProps, 'userName' | 'userEmail' | 'onSignOut'>) {
+  storageMode,
+}: Pick<WorkspaceSidebarProps, 'userName' | 'userDetail' | 'onSignOut' | 'storageMode'>) {
   const { t } = useLanguage()
   const { isMobile } = useSidebar()
-  const initials = userName.trim().charAt(0).toLocaleUpperCase() || userEmail.charAt(0).toLocaleUpperCase()
+  const initials = userName.trim().charAt(0).toLocaleUpperCase() || userDetail.charAt(0).toLocaleUpperCase()
+
+  if (storageMode === 'local') {
+    return (
+      <SidebarMenuButton className="workspace-user-trigger" title={`${userName} · ${userDetail}`}>
+        <span className="workspace-user-avatar" aria-hidden="true">
+          {initials || <UserRound size={15} />}
+        </span>
+        <span className="workspace-user-copy">
+          <span className="workspace-user-name">{userName}</span>
+          <span className="workspace-user-email">{userDetail}</span>
+        </span>
+      </SidebarMenuButton>
+    )
+  }
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <SidebarMenuButton className="workspace-user-trigger" title={`${userName} · ${userEmail}`}>
+        <SidebarMenuButton className="workspace-user-trigger" title={`${userName} · ${userDetail}`}>
           <span className="workspace-user-avatar" aria-hidden="true">
             {initials || <UserRound size={15} />}
           </span>
           <span className="workspace-user-copy">
             <span className="workspace-user-name">{userName}</span>
-            <span className="workspace-user-email">{userEmail}</span>
+            <span className="workspace-user-email">{userDetail}</span>
           </span>
           <ChevronDown className="workspace-user-chevron" size={14} aria-hidden="true" />
         </SidebarMenuButton>
@@ -226,12 +242,14 @@ function UserMenu({
         align={isMobile ? 'end' : 'start'}
         className="workspace-menu"
       >
-        <DropdownMenuItem onSelect={onSignOut}>
-          <span className="workspace-menu-option">
-            <LogOut size={15} aria-hidden="true" />
-            <span>{t('app', 'signOut')}</span>
-          </span>
-        </DropdownMenuItem>
+        {onSignOut && (
+          <DropdownMenuItem onSelect={onSignOut}>
+            <span className="workspace-menu-option">
+              <LogOut size={15} aria-hidden="true" />
+              <span>{t('app', 'signOut')}</span>
+            </span>
+          </DropdownMenuItem>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -272,20 +290,33 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <UserMenu userName={props.userName} userEmail={props.userEmail} onSignOut={props.onSignOut} />
+            <UserMenu
+              userName={props.userName}
+              userDetail={props.userDetail}
+              onSignOut={props.onSignOut}
+              storageMode={props.storageMode}
+            />
           </SidebarMenuItem>
         </SidebarMenu>
-        {props.syncStatus !== 'idle' && (
+        {(props.storageMode === 'local' || props.syncStatus !== 'idle') && (
           <span
             className={`workspace-sync-status is-${props.syncStatus}`}
             role={props.syncStatus === 'error' ? 'alert' : 'status'}
           >
             <span className={`workspace-sync-dot is-${props.syncStatus}`} aria-hidden="true" />
-            {t(
-              'workspaces',
-              props.syncStatus === 'syncing' ? 'syncing' : props.syncStatus === 'error' ? 'syncError' : 'savedLocally',
+            {props.storageMode === 'local'
+              ? t('workspaces', 'savedLocally')
+              : t(
+                  'workspaces',
+                  props.syncStatus === 'syncing'
+                    ? 'syncing'
+                    : props.syncStatus === 'error'
+                      ? 'syncError'
+                      : 'savedLocally',
+                )}
+            {props.storageMode === 'server' && props.syncStatus === 'pending' && (
+              <span> v{import.meta.env.VITE_APP_VERSION}</span>
             )}
-            {props.syncStatus === 'pending' && <span> v{import.meta.env.VITE_APP_VERSION}</span>}
           </span>
         )}
       </SidebarFooter>
