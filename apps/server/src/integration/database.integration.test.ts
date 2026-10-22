@@ -6,6 +6,8 @@ import {
   client as clientRecord,
   rateLimit,
   syncMutationReceipt,
+  ticket as ticketRecord,
+  ticketAttachment as ticketAttachmentRecord,
   user,
   workspace,
   workspaceMembership,
@@ -26,6 +28,19 @@ import {
   listClientsForWorkspaceForSync,
   updateClientForWorkspace,
 } from '../clients/client-repository.js'
+import {
+  createTicketForWorkspace,
+  deleteTicketForWorkspace,
+  getNextTicketOtNumber,
+  listTicketsForWorkspace,
+  listTicketsForWorkspaceForSync,
+  updateTicketForWorkspace,
+} from '../tickets/ticket-repository.js'
+import {
+  createTicketAttachment,
+  listTicketAttachments,
+  softDeleteTicketAttachment,
+} from '../attachments/attachment-repository.js'
 
 const firstUserId = randomUUID()
 const secondUserId = randomUUID()
@@ -39,6 +54,15 @@ const clientUpdateNameMutationId = randomUUID()
 const clientUpdateActiveMutationId = randomUUID()
 const clientDeleteMutationId = randomUUID()
 const secondClientCreateMutationId = randomUUID()
+const ticketId = randomUUID()
+const ticketClientId = randomUUID()
+const ticketClientCreateMutationId = randomUUID()
+const ticketCreateMutationId = randomUUID()
+const ticketDeliveredMutationId = randomUUID()
+const ticketProductionMutationId = randomUUID()
+const ticketDeleteMutationId = randomUUID()
+const ticketAttachmentId = randomUUID()
+const ticketCascadeAttachmentId = randomUUID()
 const limiterScope = `integration:${randomUUID()}`
 const authRateLimitKey = `integration-auth:${randomUUID()}`
 
@@ -52,6 +76,8 @@ describe('PostgreSQL workspace persistence', () => {
 
   afterAll(async () => {
     await db.delete(syncMutationReceipt).where(inArray(syncMutationReceipt.userId, [firstUserId, secondUserId]))
+    await db.delete(ticketAttachmentRecord).where(eq(ticketAttachmentRecord.workspaceId, workspaceId))
+    await db.delete(ticketRecord).where(eq(ticketRecord.workspaceId, workspaceId))
     await db.delete(clientRecord).where(eq(clientRecord.workspaceId, workspaceId))
     await db.delete(workspaceMembership).where(inArray(workspaceMembership.userId, [firstUserId, secondUserId]))
     await db.delete(workspace).where(eq(workspace.id, workspaceId))
@@ -207,6 +233,199 @@ describe('PostgreSQL workspace persistence', () => {
     expect(filteredPage.clients).toHaveLength(1)
     expect(filteredPage.clients[0]?.name).toBe('Needle Client')
     expect(filteredPage.nextCursor).toBeNull()
+  })
+
+  it('validates ticket clients, records stage dates, paginates filters, and retains deleted tickets', async () => {
+    const createdClient = await createClientForWorkspace(firstUserId, workspaceId, {
+      id: ticketClientId,
+      clientMutationId: ticketClientCreateMutationId,
+      code: 'TICKET-CLIENT',
+      name: 'Ticket Client',
+      active: true,
+    })
+    expect(createdClient.kind).toBe('created')
+
+    const ticketInput = {
+      id: ticketId,
+      clientMutationId: ticketCreateMutationId,
+      otNumber: 1,
+      clientId: randomUUID(),
+      title: 'Launch review',
+      description: 'Prepare release notes',
+      priority: 'high' as const,
+      status: 'requested' as const,
+      estimatedHours: 5.5,
+      workedHours: 1.25,
+    }
+    const invalidClient = await createTicketForWorkspace(firstUserId, workspaceId, ticketInput)
+    expect(invalidClient.kind).toBe('invalid-client')
+
+    const validTicketInput = { ...ticketInput, clientId: ticketClientId }
+    const created = await createTicketForWorkspace(firstUserId, workspaceId, validTicketInput)
+    const replayed = await createTicketForWorkspace(firstUserId, workspaceId, validTicketInput)
+    expect(created).toEqual(replayed)
+    expect(created.kind).toBe('created')
+    if (created.kind !== 'created') throw new Error('Expected the ticket to be created.')
+    expect(created.ticket).toMatchObject({
+      otNumber: 1,
+      clientId: ticketClientId,
+      clientName: 'Ticket Client',
+      estimatedHours: 5.5,
+      workedHours: 1.25,
+      createdByUserId: firstUserId,
+    })
+
+    const duplicateOtNumber = await createTicketForWorkspace(firstUserId, workspaceId, {
+      ...validTicketInput,
+      id: randomUUID(),
+      clientMutationId: randomUUID(),
+      clientId: null,
+    })
+    expect(duplicateOtNumber.kind).toBe('ot-number-conflict')
+
+    await db
+      .update(ticketRecord)
+      .set({ version: 2, workedHours: 2.5, updatedAt: new Date() })
+      .where(eq(ticketRecord.id, ticketId))
+    const staleUpdate = await updateTicketForWorkspace(firstUserId, workspaceId, ticketId, {
+      status: 'delivered',
+      expectedVersion: 1,
+      clientMutationId: ticketDeliveredMutationId,
+    })
+    expect(staleUpdate.kind).toBe('version-conflict')
+    const staleReceipts = await db
+      .select({ id: syncMutationReceipt.id })
+      .from(syncMutationReceipt)
+      .where(
+        and(eq(syncMutationReceipt.userId, firstUserId), eq(syncMutationReceipt.mutationId, ticketDeliveredMutationId)),
+      )
+    expect(staleReceipts).toEqual([])
+
+    const delivered = await updateTicketForWorkspace(firstUserId, workspaceId, ticketId, {
+      status: 'delivered',
+      expectedVersion: 2,
+      clientMutationId: ticketDeliveredMutationId,
+    })
+    expect(delivered.kind).toBe('updated')
+    if (delivered.kind !== 'updated') throw new Error('Expected the ticket to move to delivered.')
+    expect(delivered.ticket.codingFinishedAt).toBeTruthy()
+    expect(delivered.ticket.productionAt).toBeNull()
+
+    const production = await updateTicketForWorkspace(firstUserId, workspaceId, ticketId, {
+      status: 'production',
+      expectedVersion: 3,
+      clientMutationId: ticketProductionMutationId,
+    })
+    expect(production.kind).toBe('updated')
+    if (production.kind !== 'updated') throw new Error('Expected the ticket to move to production.')
+    expect(production.ticket).toMatchObject({
+      status: 'production',
+      version: 4,
+      updatedByUserId: firstUserId,
+    })
+    expect(production.ticket.codingFinishedAt).toBeTruthy()
+    expect(production.ticket.productionAt).toBeTruthy()
+
+    const attachment = await createTicketAttachment({
+      id: ticketAttachmentId,
+      workspaceId,
+      ticketId,
+      userId: firstUserId,
+      fileName: 'release notes.pdf',
+      contentType: 'application/pdf',
+      sizeBytes: 0,
+      checksumSha256: 'a'.repeat(64),
+      storageKey: `test/${ticketAttachmentId}`,
+      now: new Date(),
+    })
+    expect(attachment.kind).toBe('created')
+    const attachmentPage = await listTicketAttachments(firstUserId, workspaceId, ticketId, null)
+    expect(attachmentPage).toMatchObject({ kind: 'listed', attachments: [{ id: ticketAttachmentId }] })
+    expect((await listTicketAttachments(secondUserId, workspaceId, ticketId, null)).kind).toBe('not-found')
+    expect((await softDeleteTicketAttachment(firstUserId, workspaceId, ticketId, ticketAttachmentId)).kind).toBe(
+      'deleted',
+    )
+    const attachmentBaseTime = Date.now() + 5_000
+    const pagedAttachmentIds = Array.from({ length: 26 }, () => randomUUID())
+    await db.insert(ticketAttachmentRecord).values(
+      pagedAttachmentIds.map((id, index) => {
+        const createdAt = new Date(attachmentBaseTime + index * 1_000)
+        return {
+          id,
+          workspaceId,
+          ticketId,
+          fileName: `paged-${index}.txt`,
+          contentType: 'text/plain',
+          sizeBytes: 1,
+          checksumSha256: 'c'.repeat(64),
+          storageKey: `test/${id}`,
+          version: 1,
+          createdByUserId: firstUserId,
+          updatedByUserId: firstUserId,
+          createdAt,
+          updatedAt: createdAt,
+        }
+      }),
+    )
+    const firstAttachmentPage = await listTicketAttachments(firstUserId, workspaceId, ticketId, null)
+    expect(firstAttachmentPage.attachments).toHaveLength(25)
+    expect(firstAttachmentPage.nextCursor).not.toBeNull()
+    const secondAttachmentPage = await listTicketAttachments(
+      firstUserId,
+      workspaceId,
+      ticketId,
+      firstAttachmentPage.nextCursor,
+    )
+    expect(secondAttachmentPage.attachments).toHaveLength(1)
+    expect(secondAttachmentPage.nextCursor).toBeNull()
+    const cascadeAttachment = await createTicketAttachment({
+      id: ticketCascadeAttachmentId,
+      workspaceId,
+      ticketId,
+      userId: firstUserId,
+      fileName: 'source.zip',
+      contentType: 'application/zip',
+      sizeBytes: 1,
+      checksumSha256: 'b'.repeat(64),
+      storageKey: `test/${ticketCascadeAttachmentId}`,
+      now: new Date(),
+    })
+    expect(cascadeAttachment.kind).toBe('created')
+
+    const filtered = await listTicketsForWorkspace(firstUserId, workspaceId, null, {
+      status: 'production',
+      priority: 'high',
+      search: 'release',
+    })
+    expect(filtered.tickets.map((item) => item.id)).toEqual([ticketId])
+    expect(
+      (await listTicketsForWorkspace(secondUserId, workspaceId, null, { status: null, priority: null, search: '' }))
+        .kind,
+    ).toBe('not-found')
+
+    const deletion = await deleteTicketForWorkspace(firstUserId, workspaceId, ticketId, {
+      expectedVersion: 4,
+      clientMutationId: ticketDeleteMutationId,
+    })
+    expect(deletion.kind).toBe('deleted')
+    const activePage = await listTicketsForWorkspace(firstUserId, workspaceId, null, {
+      status: null,
+      priority: null,
+      search: '',
+    })
+    expect(activePage.tickets).toEqual([])
+    const syncPage = await listTicketsForWorkspaceForSync(firstUserId, workspaceId, null)
+    expect(syncPage.tickets.find((item) => item.id === ticketId)).toMatchObject({
+      deletedByUserId: firstUserId,
+      status: 'production',
+    })
+    expect(await getNextTicketOtNumber(firstUserId, workspaceId)).toMatchObject({ kind: 'found', nextNumber: 2 })
+    const [cascadedAttachment] = await db
+      .select({ deletedAt: ticketAttachmentRecord.deletedAt, deletedByUserId: ticketAttachmentRecord.deletedByUserId })
+      .from(ticketAttachmentRecord)
+      .where(eq(ticketAttachmentRecord.id, ticketCascadeAttachmentId))
+    expect(cascadedAttachment?.deletedAt).toBeInstanceOf(Date)
+    expect(cascadedAttachment?.deletedByUserId).toBe(firstUserId)
   })
 
   it('replays activation idempotently without incrementing membership twice', async () => {

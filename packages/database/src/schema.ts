@@ -1,5 +1,16 @@
 import { sql } from 'drizzle-orm'
-import { bigint, boolean, check, index, integer, pgTable, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core'
+import {
+  bigint,
+  boolean,
+  check,
+  index,
+  integer,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core'
 
 const timestamps = {
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -163,6 +174,98 @@ export const client = pgTable(
   ],
 )
 
+export const ticket = pgTable(
+  'ticket',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspace.id),
+    clientId: text('client_id').references(() => client.id),
+    otNumber: integer('ot_number').notNull(),
+    title: text('title').notNull(),
+    description: text('description').notNull().default(''),
+    priority: text('priority').notNull().default('medium'),
+    status: text('status').notNull().default('requested'),
+    estimatedHours: numeric('estimated_hours', { precision: 8, scale: 2, mode: 'number' }).notNull().default(0),
+    workedHours: numeric('worked_hours', { precision: 8, scale: 2, mode: 'number' }).notNull().default(0),
+    codingFinishedAt: timestamp('coding_finished_at', { withTimezone: true }),
+    productionAt: timestamp('production_at', { withTimezone: true }),
+    version: integer('version').notNull().default(1),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    updatedByUserId: text('updated_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    deletedByUserId: text('deleted_by_user_id').references(() => user.id),
+    ...timestamps,
+  },
+  (table) => [
+    check('ticket_title_length_check', sql`length(trim(${table.title})) BETWEEN 1 AND 200`),
+    check('ticket_ot_number_check', sql`${table.otNumber} BETWEEN 1 AND 2147483647`),
+    check('ticket_description_length_check', sql`length(${table.description}) <= 20000`),
+    check('ticket_priority_check', sql`${table.priority} IN ('urgent', 'high', 'medium', 'low')`),
+    check(
+      'ticket_status_check',
+      sql`${table.status} IN ('requested', 'analysis', 'development', 'review', 'correction', 'delivered', 'production')`,
+    ),
+    check('ticket_estimated_hours_check', sql`${table.estimatedHours} >= 0`),
+    check('ticket_worked_hours_check', sql`${table.workedHours} >= 0`),
+    check('ticket_version_check', sql`${table.version} > 0`),
+    uniqueIndex('ticket_workspace_ot_number_unique').on(table.workspaceId, table.otNumber),
+    index('ticket_workspace_created_active_idx')
+      .on(table.workspaceId, table.createdAt, table.id)
+      .where(sql`${table.deletedAt} IS NULL`),
+    index('ticket_workspace_status_active_idx')
+      .on(table.workspaceId, table.status, table.createdAt, table.id)
+      .where(sql`${table.deletedAt} IS NULL`),
+    index('ticket_workspace_priority_active_idx')
+      .on(table.workspaceId, table.priority, table.createdAt, table.id)
+      .where(sql`${table.deletedAt} IS NULL`),
+    index('ticket_workspace_updated_idx').on(table.workspaceId, table.updatedAt, table.id),
+  ],
+)
+
+export const ticketAttachment = pgTable(
+  'ticket_attachment',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspace.id),
+    ticketId: text('ticket_id')
+      .notNull()
+      .references(() => ticket.id),
+    fileName: text('file_name').notNull(),
+    contentType: text('content_type').notNull(),
+    sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
+    checksumSha256: text('checksum_sha256').notNull(),
+    storageKey: text('storage_key').notNull(),
+    version: integer('version').notNull().default(1),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    updatedByUserId: text('updated_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    deletedByUserId: text('deleted_by_user_id').references(() => user.id),
+    ...timestamps,
+  },
+  (table) => [
+    check('ticket_attachment_file_name_length_check', sql`length(trim(${table.fileName})) BETWEEN 1 AND 255`),
+    check('ticket_attachment_content_type_length_check', sql`length(trim(${table.contentType})) BETWEEN 1 AND 255`),
+    check('ticket_attachment_size_bytes_check', sql`${table.sizeBytes} >= 0`),
+    check('ticket_attachment_checksum_check', sql`${table.checksumSha256} ~ '^[a-f0-9]{64}$'`),
+    check('ticket_attachment_version_check', sql`${table.version} > 0`),
+    uniqueIndex('ticket_attachment_storage_key_unique').on(table.storageKey),
+    index('ticket_attachment_ticket_created_active_idx')
+      .on(table.ticketId, table.createdAt, table.id)
+      .where(sql`${table.deletedAt} IS NULL`),
+    index('ticket_attachment_workspace_updated_idx').on(table.workspaceId, table.updatedAt, table.id),
+  ],
+)
+
 export const rateLimit = pgTable(
   'rate_limit',
   {
@@ -216,7 +319,7 @@ export const syncMutationReceipt = pgTable(
   (table) => [
     check(
       'sync_mutation_receipt_kind_check',
-      sql`${table.kind} IN ('workspace.create', 'workspace.update', 'workspace.activate', 'workspace.delete', 'client.create', 'client.update', 'client.delete')`,
+      sql`${table.kind} IN ('workspace.create', 'workspace.update', 'workspace.activate', 'workspace.delete', 'client.create', 'client.update', 'client.delete', 'ticket.create', 'ticket.update', 'ticket.delete')`,
     ),
     uniqueIndex('sync_mutation_receipt_user_mutation_active_unique')
       .on(table.userId, table.mutationId)
@@ -238,5 +341,7 @@ export const authSchema = {
   workspace,
   workspaceMembership,
   client,
+  ticket,
+  ticketAttachment,
   syncMutationReceipt,
 }

@@ -1,7 +1,7 @@
 {
   "name": "vesta",
   "private": true,
-  "version": "0.1.6",
+  "version": "0.1.7",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -26,6 +26,7 @@
     "tauri": "tauri"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1155.0",
     "@base-ui/react": "^1.9.0",
     "@better-auth/drizzle-adapter": "^1.7.12",
     "@fontsource-variable/manrope": "^5.3.0",

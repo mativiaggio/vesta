@@ -4,6 +4,8 @@ import { db } from '../../../../../packages/database/src/client.js'
 import {
   client as clientRecord,
   syncMutationReceipt,
+  ticketAttachment as ticketAttachmentRecord,
+  ticket as ticketRecord,
   workspace,
   workspaceMembership,
 } from '../../../../../packages/database/src/schema.js'
@@ -364,6 +366,28 @@ export async function deleteWorkspaceForUser(userId: string, workspaceId: string
         .returning({ id: workspace.id })
 
       if (!deletedWorkspace) throw new WorkspaceNotFoundError()
+
+      await transaction
+        .update(ticketAttachmentRecord)
+        .set({
+          deletedAt: now,
+          updatedAt: now,
+          deletedByUserId: userId,
+          updatedByUserId: userId,
+          version: sql`${ticketAttachmentRecord.version} + 1`,
+        })
+        .where(and(eq(ticketAttachmentRecord.workspaceId, workspaceId), isNull(ticketAttachmentRecord.deletedAt)))
+
+      await transaction
+        .update(ticketRecord)
+        .set({
+          deletedAt: now,
+          updatedAt: now,
+          deletedByUserId: userId,
+          updatedByUserId: userId,
+          version: sql`${ticketRecord.version} + 1`,
+        })
+        .where(and(eq(ticketRecord.workspaceId, workspaceId), isNull(ticketRecord.deletedAt)))
 
       await transaction
         .update(clientRecord)
