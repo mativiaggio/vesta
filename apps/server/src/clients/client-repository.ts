@@ -138,6 +138,16 @@ function parseClient(row: ClientRow): Client {
   })
 }
 
+function isPostgresUniqueViolation(error: unknown): boolean {
+  let current: unknown = error
+  for (let depth = 0; depth < 4; depth += 1) {
+    if (typeof current !== 'object' || current === null) return false
+    if ('code' in current && current.code === '23505') return true
+    current = 'cause' in current ? current.cause : null
+  }
+  return false
+}
+
 async function findClient(transaction: Transaction, workspaceId: string, clientId: string, includeDeleted = false) {
   const [row] = await transaction
     .select(clientSelection)
@@ -254,9 +264,7 @@ export async function createClientForWorkspace(userId: string, workspaceId: stri
       return { kind: 'created' as const, client: parseClient(created) }
     })
   } catch (error) {
-    if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
-      return { kind: 'conflict' as const }
-    }
+    if (isPostgresUniqueViolation(error)) return { kind: 'conflict' as const }
     throw error
   }
 }
@@ -302,9 +310,7 @@ export async function updateClientForWorkspace(
       return { kind: 'updated' as const, client: parseClient(updated) }
     })
   } catch (error) {
-    if (typeof error === 'object' && error !== null && 'code' in error && error.code === '23505') {
-      return { kind: 'conflict' as const }
-    }
+    if (isPostgresUniqueViolation(error)) return { kind: 'conflict' as const }
     throw error
   }
 }

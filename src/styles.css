@@ -58,7 +58,8 @@ body {
 }
 /* Let shadcn/Tailwind utilities set control sizes while retaining the app font from inheritance. */
 button,
-input {
+input,
+textarea {
   font-family: inherit;
 }
 ::selection {
@@ -1071,6 +1072,19 @@ input {
 .sidebar-menu-button > svg {
   flex: 0 0 auto;
 }
+.sidebar-tooltip {
+  z-index: 100;
+  max-width: min(240px, calc(100vw - 24px));
+  overflow-wrap: anywhere;
+  border: 1px solid #41413d;
+  border-radius: 6px;
+  background: #272725;
+  padding: 5px 8px;
+  color: #f0efeb;
+  box-shadow: 0 8px 20px rgb(0 0 0 / 18%);
+  font-size: 11px;
+  line-height: 1.35;
+}
 .sidebar-menu-icon {
   color: currentColor;
 }
@@ -1582,79 +1596,6 @@ input {
   justify-content: center;
   gap: 8px;
 }
-.workspace-home {
-  width: min(100% - 56px, 900px);
-  min-height: 100%;
-  flex: 1;
-  margin: 0 auto;
-  padding-top: clamp(54px, 8vh, 76px);
-}
-.workspace-home-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 18px;
-}
-.workspace-home-mark {
-  display: grid;
-  width: 38px;
-  height: 38px;
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--workspace-accent) 12%, var(--surface));
-  color: var(--workspace-accent);
-}
-.workspace-home-label {
-  display: block;
-  margin-top: 5px;
-  color: var(--muted-foreground);
-  font-size: 12px;
-}
-.workspace-home-heading h1 {
-  overflow: hidden;
-  max-width: 65vw;
-  margin: 0;
-  font-size: 22px;
-  font-weight: 620;
-  letter-spacing: -0.03em;
-  text-overflow: ellipsis;
-}
-.workspace-home-rule {
-  height: 1px;
-  margin-top: 29px;
-  background: var(--border);
-}
-.workspace-home-empty {
-  display: flex;
-  min-height: 38svh;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-}
-.workspace-home-empty img {
-  width: 36px;
-  height: 30px;
-  margin-bottom: 17px;
-  opacity: 0.72;
-}
-.workspace-app.theme-dark .workspace-home-empty img {
-  filter: invert(1);
-}
-.workspace-home-empty h2 {
-  margin: 0 0 8px;
-  font-size: 17px;
-  font-weight: 590;
-  letter-spacing: -0.02em;
-}
-.workspace-home-empty p {
-  max-width: 40ch;
-  margin: 0;
-  color: var(--muted-foreground);
-  font-size: 13px;
-  line-height: 1.6;
-}
 .client-page {
   display: flex;
   width: min(calc(100% - 56px), 1040px);
@@ -2092,10 +2033,6 @@ input {
   .workspace-sidebar:not(.workspace-sidebar-mobile) {
     display: none;
   }
-  .workspace-home {
-    min-height: calc(100svh - 52px);
-    padding-top: 62px;
-  }
   .client-page {
     width: calc(100% - 40px);
     padding-top: 62px;
@@ -2222,14 +2159,6 @@ input {
   .workspace-create-wrap {
     width: min(100% - 40px, 560px);
     padding-top: 62px;
-  }
-  .workspace-home {
-    width: calc(100% - 40px);
-    min-height: 100%;
-    padding-top: 62px;
-  }
-  .workspace-home-empty {
-    min-height: 42svh;
   }
 }
 @media (max-width: 680px) {

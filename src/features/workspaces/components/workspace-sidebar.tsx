@@ -8,6 +8,7 @@ import {
   Pencil,
   Plus,
   Settings2,
+  Ticket,
   Users,
   UserRound,
 } from 'lucide-react'
@@ -29,6 +30,7 @@ import {
   SidebarMenuItem,
 } from '../../../components/ui/sidebar'
 import { useSidebar } from '../../../components/ui/sidebar-context'
+import { TooltipProvider } from '../../../components/ui/tooltip'
 import { useLanguage } from '../../localization/language-context'
 import type { WorkspaceStorageMode, useWorkspaceState } from '../application/use-workspace-state'
 import { WorkspaceIconGlyph } from './workspace-icon'
@@ -56,7 +58,8 @@ type WorkspaceSidebarProps = {
   onCreateWorkspace: () => void
   onNavigateOverview: () => void
   onNavigateClients: () => void
-  activeView: 'overview' | 'clients'
+  onNavigateTickets: () => void
+  activeView: 'overview' | 'clients' | 'tickets'
   onOpenSettings: () => void
   onSignOut?: () => void
 }
@@ -177,8 +180,9 @@ function WorkspaceSwitcher({
 function PrimaryNavigation({
   onNavigateOverview,
   onNavigateClients,
+  onNavigateTickets,
   activeView,
-}: Pick<WorkspaceSidebarProps, 'onNavigateOverview' | 'onNavigateClients' | 'activeView'>) {
+}: Pick<WorkspaceSidebarProps, 'onNavigateOverview' | 'onNavigateClients' | 'onNavigateTickets' | 'activeView'>) {
   const { t } = useLanguage()
   const { isMobile, setOpenMobile } = useSidebar()
 
@@ -190,7 +194,8 @@ function PrimaryNavigation({
             <SidebarMenuButton
               render={<a href="#overview" aria-current={activeView === 'overview' ? 'page' : undefined} />}
               isActive={activeView === 'overview'}
-              title={t('navigation', 'overview')}
+              aria-label={t('navigation', 'overview')}
+              tooltip={t('navigation', 'overview')}
               onClick={() => {
                 onNavigateOverview()
                 if (isMobile) setOpenMobile(false)
@@ -204,7 +209,8 @@ function PrimaryNavigation({
             <SidebarMenuButton
               render={<a href="#clients" aria-current={activeView === 'clients' ? 'page' : undefined} />}
               isActive={activeView === 'clients'}
-              title={t('clients', 'title')}
+              aria-label={t('clients', 'title')}
+              tooltip={t('clients', 'title')}
               onClick={() => {
                 onNavigateClients()
                 if (isMobile) setOpenMobile(false)
@@ -212,6 +218,21 @@ function PrimaryNavigation({
             >
               <Users className="sidebar-menu-icon" size={16} aria-hidden="true" />
               <span className="sidebar-menu-label">{t('clients', 'title')}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              render={<a href="#tickets" aria-current={activeView === 'tickets' ? 'page' : undefined} />}
+              isActive={activeView === 'tickets'}
+              aria-label={t('tickets', 'title')}
+              tooltip={t('tickets', 'title')}
+              onClick={() => {
+                onNavigateTickets()
+                if (isMobile) setOpenMobile(false)
+              }}
+            >
+              <Ticket className="sidebar-menu-icon" size={16} aria-hidden="true" />
+              <span className="sidebar-menu-label">{t('tickets', 'title')}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -281,70 +302,74 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
   const { isMobile, theme, setOpenMobile } = useSidebar()
 
   return (
-    <Sidebar theme={theme} mobileTitle={t('navigation', 'primary')}>
-      <SidebarHeader className="workspace-sidebar-header">
-        <div className="workspace-sidebar-brand-row">
-          <a className="workspace-brand" href="#overview" aria-label={t('app', 'home')}>
-            <img src="/brand/logo-vesta.svg" alt="" />
-            <span>Vesta</span>
-          </a>
-        </div>
-        <WorkspaceSwitcher {...props} />
-      </SidebarHeader>
+    <TooltipProvider delay={350}>
+      <Sidebar theme={theme} mobileTitle={t('navigation', 'primary')}>
+        <SidebarHeader className="workspace-sidebar-header">
+          <div className="workspace-sidebar-brand-row">
+            <a className="workspace-brand" href="#overview" aria-label={t('app', 'home')}>
+              <img src="/brand/logo-vesta.svg" alt="" />
+              <span>Vesta</span>
+            </a>
+          </div>
+          <WorkspaceSwitcher {...props} />
+        </SidebarHeader>
 
-      <SidebarContent>
-        <PrimaryNavigation
-          onNavigateOverview={props.onNavigateOverview}
-          onNavigateClients={props.onNavigateClients}
-          activeView={props.activeView}
-        />
-      </SidebarContent>
+        <SidebarContent>
+          <PrimaryNavigation
+            onNavigateOverview={props.onNavigateOverview}
+            onNavigateClients={props.onNavigateClients}
+            onNavigateTickets={props.onNavigateTickets}
+            activeView={props.activeView}
+          />
+        </SidebarContent>
 
-      <SidebarFooter className="workspace-sidebar-footer">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton
-              title={t('navigation', 'settings')}
-              onClick={() => {
-                if (isMobile) setOpenMobile(false)
-                props.onOpenSettings()
-              }}
+        <SidebarFooter className="workspace-sidebar-footer">
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                aria-label={t('navigation', 'settings')}
+                tooltip={t('navigation', 'settings')}
+                onClick={() => {
+                  if (isMobile) setOpenMobile(false)
+                  props.onOpenSettings()
+                }}
+              >
+                <Settings2 className="sidebar-menu-icon" size={16} aria-hidden="true" />
+                <span className="sidebar-menu-label">{t('navigation', 'settings')}</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+            <SidebarMenuItem>
+              <UserMenu
+                userName={props.userName}
+                userDetail={props.userDetail}
+                onSignOut={props.onSignOut}
+                storageMode={props.storageMode}
+              />
+            </SidebarMenuItem>
+          </SidebarMenu>
+          {(props.storageMode === 'local' || props.syncStatus !== 'idle') && (
+            <span
+              className={`workspace-sync-status is-${props.syncStatus}`}
+              role={props.syncStatus === 'error' ? 'alert' : 'status'}
             >
-              <Settings2 className="sidebar-menu-icon" size={16} aria-hidden="true" />
-              <span className="sidebar-menu-label">{t('navigation', 'settings')}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <UserMenu
-              userName={props.userName}
-              userDetail={props.userDetail}
-              onSignOut={props.onSignOut}
-              storageMode={props.storageMode}
-            />
-          </SidebarMenuItem>
-        </SidebarMenu>
-        {(props.storageMode === 'local' || props.syncStatus !== 'idle') && (
-          <span
-            className={`workspace-sync-status is-${props.syncStatus}`}
-            role={props.syncStatus === 'error' ? 'alert' : 'status'}
-          >
-            <span className={`workspace-sync-dot is-${props.syncStatus}`} aria-hidden="true" />
-            {props.storageMode === 'local'
-              ? t('workspaces', 'savedLocally')
-              : t(
-                  'workspaces',
-                  props.syncStatus === 'syncing'
-                    ? 'syncing'
-                    : props.syncStatus === 'error'
-                      ? 'syncError'
-                      : 'savedLocally',
-                )}
-            {props.storageMode === 'server' && props.syncStatus === 'pending' && (
-              <span> v{import.meta.env.VITE_APP_VERSION}</span>
-            )}
-          </span>
-        )}
-      </SidebarFooter>
-    </Sidebar>
+              <span className={`workspace-sync-dot is-${props.syncStatus}`} aria-hidden="true" />
+              {props.storageMode === 'local'
+                ? t('workspaces', 'savedLocally')
+                : t(
+                    'workspaces',
+                    props.syncStatus === 'syncing'
+                      ? 'syncing'
+                      : props.syncStatus === 'error'
+                        ? 'syncError'
+                        : 'savedLocally',
+                  )}
+              {props.storageMode === 'server' && props.syncStatus === 'pending' && (
+                <span> v{import.meta.env.VITE_APP_VERSION}</span>
+              )}
+            </span>
+          )}
+        </SidebarFooter>
+      </Sidebar>
+    </TooltipProvider>
   )
 }

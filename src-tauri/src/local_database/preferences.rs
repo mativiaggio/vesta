@@ -38,7 +38,11 @@ pub(super) fn set_local_preference_impl(
 
 fn validate_preference_key(key: &str) -> Result<(), String> {
     match key {
-        "vesta.language" | "vesta.theme" | "vesta.date-format" => Ok(()),
+        "vesta.language"
+        | "vesta.theme"
+        | "vesta.date-format"
+        | "vesta.tickets-view"
+        | "vesta.ticket-detail-presentation" => Ok(()),
         _ => Err("This preference is not supported by local storage.".to_owned()),
     }
 }
@@ -52,6 +56,8 @@ fn validate_preference(key: &str, value: &str) -> Result<(), String> {
             value,
             "locale" | "day-month-year" | "month-day-year" | "year-month-day"
         ),
+        "vesta.tickets-view" => matches!(value, "table" | "kanban"),
+        "vesta.ticket-detail-presentation" => matches!(value, "modal" | "fullscreen"),
         _ => false,
     };
     if valid {

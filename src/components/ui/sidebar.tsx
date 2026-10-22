@@ -6,6 +6,7 @@ import { cva, type VariantProps } from 'class-variance-authority'
 import { PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { Button } from './button'
+import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip'
 import { SidebarContext, sidebarToggleEvent, type SidebarContextValue, useSidebar } from './sidebar-context'
 
 type SidebarProviderProps = React.ComponentProps<'div'> & {
@@ -200,12 +201,15 @@ export function SidebarMenuButton({
   variant,
   size,
   className,
+  tooltip,
   ...props
 }: useRender.ComponentProps<'button'> &
   React.ComponentProps<'button'> & {
     isActive?: boolean
+    tooltip?: React.ReactNode
   } & VariantProps<typeof sidebarMenuButtonVariants>) {
-  return useRender({
+  const { state, isMobile } = useSidebar()
+  const menuButton = useRender({
     defaultTagName: 'button',
     props: mergeProps<'button'>(
       {
@@ -216,4 +220,15 @@ export function SidebarMenuButton({
     render,
     state: { slot: 'sidebar-menu-button', active: isActive, size },
   })
+
+  if (!tooltip || isMobile || state !== 'collapsed') return menuButton
+
+  return (
+    <Tooltip>
+      <TooltipTrigger render={menuButton} />
+      <TooltipContent side="right" sideOffset={14}>
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
+  )
 }

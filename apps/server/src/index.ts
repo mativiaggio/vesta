@@ -8,6 +8,10 @@ import { requireSession, type AuthEnvironment } from './middleware/require-sessi
 import { PostgresMutationRateLimiter } from './rate-limit/postgres-mutation-rate-limiter.js'
 import { createWorkspaceRoutes } from './workspaces/routes.js'
 import { createClientRoutes } from './clients/routes.js'
+import { createTicketRoutes } from './tickets/routes.js'
+import { createBlobStorage } from './attachments/create-blob-storage.js'
+
+const attachmentStorage = await createBlobStorage(serverConfig.attachmentStorage)
 
 const app = new Hono<AuthEnvironment>()
 
@@ -19,7 +23,7 @@ app.use(
     origin: serverConfig.trustedOrigins,
     credentials: true,
     allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization', 'X-Vesta-Language'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Vesta-Language', 'X-Vesta-File-Name', 'X-Vesta-File-Size'],
   }),
 )
 
@@ -30,6 +34,10 @@ app.get('/api/me', requireSession, (context) => {
 
 app.route('/api/workspaces', createWorkspaceRoutes(new PostgresMutationRateLimiter()))
 app.route('/api/workspaces/:workspaceId/clients', createClientRoutes(new PostgresMutationRateLimiter()))
+app.route(
+  '/api/workspaces/:workspaceId/tickets',
+  createTicketRoutes(new PostgresMutationRateLimiter(), attachmentStorage),
+)
 
 app.all('/api/auth/*', (context) => auth.handler(context.req.raw))
 

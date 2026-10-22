@@ -9,6 +9,7 @@ dist/
 src-tauri/target/
 /release-assets/official/
 .env
+/.vesta-data/
 
 # =========================================================================
 # Variaciones de Entorno y Secretos (Seguridad)

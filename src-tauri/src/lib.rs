@@ -164,6 +164,18 @@ pub fn run() {
             local_database::create_local_client,
             local_database::update_local_client,
             local_database::delete_local_client,
+            local_database::get_local_tickets,
+            local_database::get_local_tickets_for_sync,
+            local_database::get_next_local_ticket_ot_number,
+            local_database::create_local_ticket,
+            local_database::update_local_ticket,
+            local_database::delete_local_ticket,
+            local_database::get_local_ticket_attachments,
+            local_database::add_local_ticket_attachments,
+            local_database::delete_local_ticket_attachment,
+            local_database::open_local_ticket_attachment,
+            local_database::read_local_ticket_attachment_preview,
+            local_database::open_local_ticket_attachment_folder,
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");

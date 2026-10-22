@@ -10,6 +10,7 @@ import { SettingsDialog } from '../../settings/components/settings-dialog'
 import { WorkspaceSettingsDialog } from './workspace-settings-dialog'
 import { WorkspaceIconGlyph } from './workspace-icon'
 import { WorkspaceAppearanceFields } from './workspace-appearance-fields'
+import { WorkspaceOverview } from './workspace-overview'
 import { workspaceAccentColors } from './workspace-theme'
 import { WorkspaceSidebar } from './workspace-sidebar'
 import {
@@ -20,6 +21,9 @@ import {
 
 const ClientsExperience = lazy(() =>
   import('../../clients/components/clients-experience').then((module) => ({ default: module.ClientsExperience })),
+)
+const TicketsExperience = lazy(() =>
+  import('../../tickets/components/tickets-experience').then((module) => ({ default: module.TicketsExperience })),
 )
 
 type WorkspaceExperienceProps = {
@@ -61,7 +65,7 @@ export function WorkspaceExperience({
     retry,
   } = useWorkspaceState(userId, storageMode)
   const [isCreating, setIsCreating] = useState(false)
-  const [activeView, setActiveView] = useState<'overview' | 'clients'>('clients')
+  const [activeView, setActiveView] = useState<'overview' | 'clients' | 'tickets'>('overview')
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null)
   const [name, setName] = useState('')
@@ -77,7 +81,7 @@ export function WorkspaceExperience({
   async function activateWorkspace(workspaceId: string) {
     if (await activate(workspaceId)) {
       setIsCreating(false)
-      setActiveView('clients')
+      setActiveView('overview')
     }
   }
 
@@ -134,6 +138,10 @@ export function WorkspaceExperience({
           onNavigateClients={() => {
             setIsCreating(false)
             setActiveView('clients')
+          }}
+          onNavigateTickets={() => {
+            setIsCreating(false)
+            setActiveView('tickets')
           }}
           onSignOut={onSignOut}
         />
@@ -260,28 +268,29 @@ export function WorkspaceExperience({
               theme={theme}
             />
           </Suspense>
-        ) : activeWorkspace ? (
-          <section
-            className="workspace-home"
-            id="overview"
-            style={{ '--workspace-accent': workspaceAccentColors[activeWorkspace.accentColor] } as CSSProperties}
-          >
-            <div className="workspace-home-heading">
-              <div>
-                <h1>{t('navigation', 'overview')}</h1>
-                <span className="workspace-home-label">{activeWorkspace.name}</span>
+        ) : activeWorkspace && activeView === 'tickets' ? (
+          <Suspense
+            fallback={
+              <div className="workspace-loading" role="status">
+                <span />
+                <span />
               </div>
-              <span className="workspace-home-mark">
-                <WorkspaceIconGlyph icon={activeWorkspace.icon} size={20} />
-              </span>
-            </div>
-            <div className="workspace-home-rule" />
-            <div className="workspace-home-empty">
-              <img src="/brand/logo-vesta.svg" alt="" />
-              <h2>{t('office', 'heading')}</h2>
-              <p>{t('office', 'description')}</p>
-            </div>
-          </section>
+            }
+          >
+            <TicketsExperience
+              userId={userId}
+              workspaceId={activeWorkspace.id}
+              storageMode={storageMode}
+              theme={theme}
+            />
+          </Suspense>
+        ) : activeWorkspace ? (
+          <WorkspaceOverview
+            key={activeWorkspace.id}
+            userId={userId}
+            workspace={activeWorkspace}
+            storageMode={storageMode}
+          />
         ) : null}
       </SidebarInset>
       <SettingsDialog

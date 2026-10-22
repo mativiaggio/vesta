@@ -306,7 +306,7 @@ fn validate_cursor(cursor: Option<ClientCursor>) -> Result<Option<ClientCursor>,
             .iter()
             .enumerate()
             .all(|(separator, position)| {
-                let expected = [b'-', b'-', b'T', b':', b':', b'.', b'Z'][separator];
+                let expected = b"--T::.Z"[separator];
                 bytes[*position] == expected
             })
         && bytes.iter().enumerate().all(|(index, byte)| {
