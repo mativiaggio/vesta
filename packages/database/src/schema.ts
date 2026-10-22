@@ -7,6 +7,7 @@ import {
   integer,
   numeric,
   pgTable,
+  jsonb,
   text,
   timestamp,
   uniqueIndex,
@@ -227,6 +228,41 @@ export const ticket = pgTable(
   ],
 )
 
+export const note = pgTable(
+  'note',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspace.id),
+    ticketId: text('ticket_id')
+      .notNull()
+      .references(() => ticket.id),
+    title: text('title').notNull(),
+    content: jsonb('content').notNull(),
+    version: integer('version').notNull().default(1),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    updatedByUserId: text('updated_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    deletedByUserId: text('deleted_by_user_id').references(() => user.id),
+    ...timestamps,
+  },
+  (table) => [
+    check('note_title_length_check', sql`length(trim(${table.title})) BETWEEN 1 AND 160`),
+    check('note_version_check', sql`${table.version} > 0`),
+    index('note_workspace_created_active_idx')
+      .on(table.workspaceId, table.createdAt, table.id)
+      .where(sql`${table.deletedAt} IS NULL`),
+    index('note_ticket_created_active_idx')
+      .on(table.ticketId, table.createdAt, table.id)
+      .where(sql`${table.deletedAt} IS NULL`),
+    index('note_workspace_updated_idx').on(table.workspaceId, table.updatedAt, table.id),
+  ],
+)
+
 export const ticketAttachment = pgTable(
   'ticket_attachment',
   {
@@ -263,6 +299,45 @@ export const ticketAttachment = pgTable(
       .on(table.ticketId, table.createdAt, table.id)
       .where(sql`${table.deletedAt} IS NULL`),
     index('ticket_attachment_workspace_updated_idx').on(table.workspaceId, table.updatedAt, table.id),
+  ],
+)
+
+export const noteAttachment = pgTable(
+  'note_attachment',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspace.id),
+    noteId: text('note_id')
+      .notNull()
+      .references(() => note.id),
+    fileName: text('file_name').notNull(),
+    contentType: text('content_type').notNull(),
+    sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
+    checksumSha256: text('checksum_sha256').notNull(),
+    storageKey: text('storage_key').notNull(),
+    version: integer('version').notNull().default(1),
+    createdByUserId: text('created_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    updatedByUserId: text('updated_by_user_id')
+      .notNull()
+      .references(() => user.id),
+    deletedByUserId: text('deleted_by_user_id').references(() => user.id),
+    ...timestamps,
+  },
+  (table) => [
+    check('note_attachment_file_name_length_check', sql`length(trim(${table.fileName})) BETWEEN 1 AND 255`),
+    check('note_attachment_content_type_length_check', sql`length(trim(${table.contentType})) BETWEEN 1 AND 255`),
+    check('note_attachment_size_bytes_check', sql`${table.sizeBytes} >= 0`),
+    check('note_attachment_checksum_check', sql`${table.checksumSha256} ~ '^[a-f0-9]{64}$'`),
+    check('note_attachment_version_check', sql`${table.version} > 0`),
+    uniqueIndex('note_attachment_storage_key_unique').on(table.storageKey),
+    index('note_attachment_note_created_active_idx')
+      .on(table.noteId, table.createdAt, table.id)
+      .where(sql`${table.deletedAt} IS NULL`),
+    index('note_attachment_workspace_updated_idx').on(table.workspaceId, table.updatedAt, table.id),
   ],
 )
 
@@ -319,7 +394,7 @@ export const syncMutationReceipt = pgTable(
   (table) => [
     check(
       'sync_mutation_receipt_kind_check',
-      sql`${table.kind} IN ('workspace.create', 'workspace.update', 'workspace.activate', 'workspace.delete', 'client.create', 'client.update', 'client.delete', 'ticket.create', 'ticket.update', 'ticket.delete')`,
+      sql`${table.kind} IN ('workspace.create', 'workspace.update', 'workspace.activate', 'workspace.delete', 'client.create', 'client.update', 'client.delete', 'ticket.create', 'ticket.update', 'ticket.delete', 'note.create', 'note.update', 'note.delete')`,
     ),
     uniqueIndex('sync_mutation_receipt_user_mutation_active_unique')
       .on(table.userId, table.mutationId)
@@ -342,6 +417,8 @@ export const authSchema = {
   workspaceMembership,
   client,
   ticket,
+  note,
   ticketAttachment,
+  noteAttachment,
   syncMutationReceipt,
 }

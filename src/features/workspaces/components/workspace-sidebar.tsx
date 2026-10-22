@@ -8,6 +8,7 @@ import {
   Pencil,
   Plus,
   Settings2,
+  StickyNote,
   Ticket,
   Users,
   UserRound,
@@ -59,7 +60,8 @@ type WorkspaceSidebarProps = {
   onNavigateOverview: () => void
   onNavigateClients: () => void
   onNavigateTickets: () => void
-  activeView: 'overview' | 'clients' | 'tickets'
+  onNavigateNotes: () => void
+  activeView: 'overview' | 'clients' | 'tickets' | 'notes'
   onOpenSettings: () => void
   onSignOut?: () => void
 }
@@ -181,8 +183,9 @@ function PrimaryNavigation({
   onNavigateOverview,
   onNavigateClients,
   onNavigateTickets,
+  onNavigateNotes,
   activeView,
-}: Pick<WorkspaceSidebarProps, 'onNavigateOverview' | 'onNavigateClients' | 'onNavigateTickets' | 'activeView'>) {
+}: Pick<WorkspaceSidebarProps, 'onNavigateOverview' | 'onNavigateClients' | 'onNavigateTickets' | 'onNavigateNotes' | 'activeView'>) {
   const { t } = useLanguage()
   const { isMobile, setOpenMobile } = useSidebar()
 
@@ -233,6 +236,21 @@ function PrimaryNavigation({
             >
               <Ticket className="sidebar-menu-icon" size={16} aria-hidden="true" />
               <span className="sidebar-menu-label">{t('tickets', 'title')}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              render={<a href="#notes" aria-current={activeView === 'notes' ? 'page' : undefined} />}
+              isActive={activeView === 'notes'}
+              aria-label={t('navigation', 'notes')}
+              tooltip={t('navigation', 'notes')}
+              onClick={() => {
+                onNavigateNotes()
+                if (isMobile) setOpenMobile(false)
+              }}
+            >
+              <StickyNote className="sidebar-menu-icon" size={16} aria-hidden="true" />
+              <span className="sidebar-menu-label">{t('navigation', 'notes')}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -319,6 +337,7 @@ export function WorkspaceSidebar(props: WorkspaceSidebarProps) {
             onNavigateOverview={props.onNavigateOverview}
             onNavigateClients={props.onNavigateClients}
             onNavigateTickets={props.onNavigateTickets}
+            onNavigateNotes={props.onNavigateNotes}
             activeView={props.activeView}
           />
         </SidebarContent>

@@ -1,9 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import { CSS } from '@dnd-kit/utilities'
+import {
   ChevronLeft,
   ChevronRight,
   Columns3,
   Eye,
+  GripVertical,
   LoaderCircle,
   List,
   Pencil,
@@ -46,6 +58,7 @@ type TicketsExperienceProps = {
   workspaceId: string
   storageMode: TicketStorageMode
   theme: Theme
+  onOpenNotes?: (ticket: Ticket) => void
 }
 
 function statusKey(status: TicketStatus): `status_${TicketStatus}` {
@@ -63,7 +76,163 @@ function milestoneDate(ticket: Ticket): string | null {
   return null
 }
 
-export function TicketsExperience({ userId, workspaceId, storageMode, theme }: TicketsExperienceProps) {
+type TicketKanbanCardProps = {
+  ticket: Ticket
+  dateFormatter: Intl.DateTimeFormat
+  hourFormatter: Intl.NumberFormat
+  onOpen: () => void
+  onEdit: () => void
+  onStatusChange: (status: TicketStatus) => void
+}
+
+function TicketKanbanCard({ ticket, dateFormatter, hourFormatter, onOpen, onEdit, onStatusChange }: TicketKanbanCardProps) {
+  const { t } = useLanguage()
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: ticket.id })
+  const stageDate = milestoneDate(ticket)
+
+  return (
+    <article
+      ref={setNodeRef}
+      className={`ticket-kanban-card${isDragging ? ' is-dragging' : ''}`}
+      style={{ transform: CSS.Translate.toString(transform) }}
+    >
+      <div className="ticket-kanban-card-heading">
+        <div className="ticket-kanban-tags">
+          <button
+            type="button"
+            className="ticket-kanban-drag-handle"
+            {...attributes}
+            {...listeners}
+            aria-label={`${t('tickets', 'dragTicket')}: ${ticket.title}`}
+            title={t('tickets', 'dragTicket')}
+          >
+            <GripVertical size={14} aria-hidden="true" />
+          </button>
+          <span className="ticket-kanban-ot-number">
+            {t('tickets', 'otNumberShort')} {ticket.otNumber}
+          </span>
+          <span className={`ticket-priority-badge is-${ticket.priority}`}>{t('tickets', ticket.priority)}</span>
+        </div>
+        <div className="ticket-kanban-card-actions">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label={`${t('tickets', 'viewTicket')}: ${ticket.title}`}
+            title={t('tickets', 'viewTicket')}
+            onClick={onOpen}
+          >
+            <Eye size={13} aria-hidden="true" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label={`${t('tickets', 'edit')} ${ticket.title}`}
+            title={t('tickets', 'edit')}
+            onClick={onEdit}
+          >
+            <Pencil size={13} aria-hidden="true" />
+          </Button>
+        </div>
+      </div>
+      <h3>{ticket.title}</h3>
+      <p className="ticket-kanban-client">
+        {clientLabel(ticket, t('tickets', 'internal'), t('tickets', 'clientUnavailable'))}
+      </p>
+      {ticket.description && <p className="ticket-kanban-description">{ticket.description}</p>}
+      <p className="ticket-kanban-hours">
+        <span>
+          {t('tickets', 'estimatedHours')}: {hourFormatter.format(ticket.estimatedHours)}
+        </span>
+        <span>
+          {t('tickets', 'workedHours')}: {hourFormatter.format(ticket.workedHours)}
+        </span>
+      </p>
+      {stageDate && (
+        <time className="ticket-stage-date" dateTime={stageDate}>
+          {dateFormatter.format(new Date(stageDate))}
+        </time>
+      )}
+      <Select
+        value={ticket.status}
+        onValueChange={(value) => {
+          if (ticketStatuses.includes(value as TicketStatus) && value !== ticket.status) {
+            onStatusChange(value as TicketStatus)
+          }
+        }}
+      >
+        <SelectTrigger className="ticket-card-status-select" aria-label={`${t('tickets', 'moveTicketTo')}: ${ticket.title}`}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {ticketStatuses.map((option) => (
+            <SelectItem key={option} value={option}>
+              {t('tickets', statusKey(option))}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </article>
+  )
+}
+
+type TicketKanbanLaneProps = {
+  status: TicketStatus
+  tickets: Ticket[]
+  dateFormatter: Intl.DateTimeFormat
+  hourFormatter: Intl.NumberFormat
+  onOpenTicket: (ticket: Ticket) => void
+  onEditTicket: (ticket: Ticket) => void
+  onMoveTicket: (ticket: Ticket, status: TicketStatus) => void
+}
+
+function TicketKanbanLane({
+  status,
+  tickets,
+  dateFormatter,
+  hourFormatter,
+  onOpenTicket,
+  onEditTicket,
+  onMoveTicket,
+}: TicketKanbanLaneProps) {
+  const { t } = useLanguage()
+  const { isOver, setNodeRef } = useDroppable({ id: status })
+  const laneTickets = tickets.filter((ticket) => ticket.status === status)
+
+  return (
+    <section
+      ref={setNodeRef}
+      className={`ticket-kanban-lane${isOver ? ' is-drop-target' : ''}`}
+      aria-labelledby={`ticket-lane-${status}`}
+    >
+      <header className="ticket-kanban-lane-heading">
+        <h2 id={`ticket-lane-${status}`}>{t('tickets', statusKey(status))}</h2>
+        <span aria-label={`${laneTickets.length}`}>{laneTickets.length}</span>
+      </header>
+      {laneTickets.length === 0 ? (
+        <p className="ticket-kanban-empty">{t('tickets', 'noTicketsInStage')}</p>
+      ) : (
+        <ul className="ticket-kanban-list">
+          {laneTickets.map((ticket) => (
+            <li key={ticket.id}>
+              <TicketKanbanCard
+                ticket={ticket}
+                dateFormatter={dateFormatter}
+                hourFormatter={hourFormatter}
+                onOpen={() => onOpenTicket(ticket)}
+                onEdit={() => onEditTicket(ticket)}
+                onStatusChange={(nextStatus) => onMoveTicket(ticket, nextStatus)}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  )
+}
+
+export function TicketsExperience({ userId, workspaceId, storageMode, theme, onOpenNotes }: TicketsExperienceProps) {
   const { language, t } = useLanguage()
   const [search, setSearch] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
@@ -114,6 +283,10 @@ export function TicketsExperience({ userId, workspaceId, storageMode, theme }: T
         maximumFractionDigits: 2,
       }),
     [language],
+  )
+  const dragSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor),
   )
 
   useEffect(() => {
@@ -237,6 +410,13 @@ export function TicketsExperience({ userId, workspaceId, storageMode, theme }: T
 
   const pageNumber = cursorHistory.length + 1
   const hasPagination = cursorHistory.length > 0 || nextCursor !== null
+  function handleKanbanDragEnd(event: DragEndEvent) {
+    const ticketId = String(event.active.id)
+    const status = event.over?.id
+    const ticket = tickets.find((item) => item.id === ticketId)
+    if (!ticket || typeof status !== 'string' || !ticketStatuses.includes(status as TicketStatus)) return
+    if (ticket.status !== status) void update(ticket.id, { status: status as TicketStatus }, ticket.clientName)
+  }
   const syncMessage =
     storageMode === 'local'
       ? null
@@ -543,125 +723,54 @@ export function TicketsExperience({ userId, workspaceId, storageMode, theme }: T
               </table>
             </div>
           ) : (
-            <div className="ticket-kanban" aria-label={t('tickets', 'kanbanView')}>
-              {ticketStatuses.map((status) => {
-                const laneTickets = tickets.filter((ticket) => ticket.status === status)
-                return (
-                  <section
-                    className="ticket-kanban-lane"
+            <DndContext
+              sensors={dragSensors}
+              onDragEnd={handleKanbanDragEnd}
+              accessibility={{
+                screenReaderInstructions: { draggable: t('tickets', 'dragInstructions') },
+                announcements: {
+                  onDragStart: ({ active }) => {
+                    const ticket = tickets.find((item) => item.id === String(active.id))
+                    return ticket ? `${t('tickets', 'ticketPickedUp')}: ${ticket.title}` : t('tickets', 'ticketPickedUp')
+                  },
+                  onDragOver: ({ active, over }) => {
+                    const ticket = tickets.find((item) => item.id === String(active.id))
+                    const status = typeof over?.id === 'string' && ticketStatuses.includes(over.id as TicketStatus)
+                      ? (over.id as TicketStatus)
+                      : null
+                    if (!status) return t('tickets', 'noDropTarget')
+                    return `${ticket?.title ?? ''} · ${t('tickets', 'ticketDroppedAt')} ${t('tickets', statusKey(status))}`
+                  },
+                  onDragEnd: ({ active, over }) => {
+                    const ticket = tickets.find((item) => item.id === String(active.id))
+                    const status = typeof over?.id === 'string' && ticketStatuses.includes(over.id as TicketStatus)
+                      ? (over.id as TicketStatus)
+                      : null
+                    return status
+                      ? `${ticket?.title ?? ''} · ${t('tickets', 'ticketDroppedAt')} ${t('tickets', statusKey(status))}`
+                      : t('tickets', 'noDropTarget')
+                  },
+                  onDragCancel: () => t('tickets', 'ticketDropCanceled'),
+                },
+              }}
+            >
+              <div className="ticket-kanban" role="region" aria-label={t('tickets', 'kanbanView')}>
+                {ticketStatuses.map((status) => (
+                  <TicketKanbanLane
                     key={status}
-                    aria-labelledby={`ticket-lane-${status}`}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={(event) => {
-                      event.preventDefault()
-                      const ticketId = event.dataTransfer.getData('text/plain')
-                      const draggedTicket = tickets.find((ticket) => ticket.id === ticketId)
-                      if (draggedTicket && draggedTicket.status !== status) {
-                        void update(ticketId, { status }, draggedTicket.clientName)
-                      }
+                    status={status}
+                    tickets={tickets}
+                    dateFormatter={dateFormatter}
+                    hourFormatter={hourFormatter}
+                    onOpenTicket={(ticket) => void openTicketView(ticket)}
+                    onEditTicket={openEdit}
+                    onMoveTicket={(ticket, nextStatus) => {
+                      void update(ticket.id, { status: nextStatus }, ticket.clientName)
                     }}
-                  >
-                    <header className="ticket-kanban-lane-heading">
-                      <h2 id={`ticket-lane-${status}`}>{t('tickets', statusKey(status))}</h2>
-                      <span aria-label={`${laneTickets.length}`}>{laneTickets.length}</span>
-                    </header>
-                    {laneTickets.length === 0 ? (
-                      <p className="ticket-kanban-empty">{t('tickets', 'noTicketsInStage')}</p>
-                    ) : (
-                      <ul className="ticket-kanban-list">
-                        {laneTickets.map((ticket) => {
-                          const stageDate = milestoneDate(ticket)
-                          return (
-                            <li key={ticket.id}>
-                              <article
-                                className="ticket-kanban-card"
-                                draggable
-                                onDragStart={(event) => event.dataTransfer.setData('text/plain', ticket.id)}
-                              >
-                                <div className="ticket-kanban-card-heading">
-                                  <div className="ticket-kanban-tags">
-                                    <span className="ticket-kanban-ot-number">
-                                      {t('tickets', 'otNumberShort')} {ticket.otNumber}
-                                    </span>
-                                    <span className={`ticket-priority-badge is-${ticket.priority}`}>
-                                      {t('tickets', ticket.priority)}
-                                    </span>
-                                  </div>
-                                  <div className="ticket-kanban-card-actions">
-                                    <Button
-                                      type="button"
-                                      size="icon"
-                                      variant="ghost"
-                                      aria-label={`${t('tickets', 'viewTicket')}: ${ticket.title}`}
-                                      title={t('tickets', 'viewTicket')}
-                                      onClick={() => void openTicketView(ticket)}
-                                    >
-                                      <Eye size={13} aria-hidden="true" />
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      size="icon"
-                                      variant="ghost"
-                                      aria-label={`${t('tickets', 'edit')} ${ticket.title}`}
-                                      title={t('tickets', 'edit')}
-                                      onClick={() => openEdit(ticket)}
-                                    >
-                                      <Pencil size={13} aria-hidden="true" />
-                                    </Button>
-                                  </div>
-                                </div>
-                                <h3>{ticket.title}</h3>
-                                <p className="ticket-kanban-client">
-                                  {clientLabel(ticket, t('tickets', 'internal'), t('tickets', 'clientUnavailable'))}
-                                </p>
-                                {ticket.description && (
-                                  <p className="ticket-kanban-description">{ticket.description}</p>
-                                )}
-                                <p className="ticket-kanban-hours">
-                                  <span>
-                                    {t('tickets', 'estimatedHours')}: {hourFormatter.format(ticket.estimatedHours)}
-                                  </span>
-                                  <span>
-                                    {t('tickets', 'workedHours')}: {hourFormatter.format(ticket.workedHours)}
-                                  </span>
-                                </p>
-                                {stageDate && (
-                                  <time className="ticket-stage-date" dateTime={stageDate}>
-                                    {dateFormatter.format(new Date(stageDate))}
-                                  </time>
-                                )}
-                                <Select
-                                  value={ticket.status}
-                                  onValueChange={(value) => {
-                                    if (ticketStatuses.includes(value as TicketStatus) && value !== ticket.status) {
-                                      void update(ticket.id, { status: value as TicketStatus }, ticket.clientName)
-                                    }
-                                  }}
-                                >
-                                  <SelectTrigger
-                                    className="ticket-card-status-select"
-                                    aria-label={`${t('tickets', 'moveTicketTo')}: ${ticket.title}`}
-                                  >
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {ticketStatuses.map((option) => (
-                                      <SelectItem key={option} value={option}>
-                                        {t('tickets', statusKey(option))}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </article>
-                            </li>
-                          )
-                        })}
-                      </ul>
-                    )}
-                  </section>
-                )
-              })}
-            </div>
+                  />
+                ))}
+              </div>
+            </DndContext>
           )}
 
           {hasPagination && (
@@ -727,6 +836,7 @@ export function TicketsExperience({ userId, workspaceId, storageMode, theme }: T
           theme={theme}
           presentation={ticketDetailPresentation}
           onPresentationChange={changeTicketDetailPresentation}
+          onOpenNotes={onOpenNotes}
           onOpenChange={(open) => {
             if (!open) closeTicketView()
           }}

@@ -36,8 +36,8 @@ pub(crate) struct LocalTicketAttachmentPage {
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct AttachmentCursor {
-    created_at: String,
-    id: String,
+    pub(crate) created_at: String,
+    pub(crate) id: String,
 }
 
 fn valid_id(value: &str) -> bool {
@@ -59,7 +59,7 @@ fn validate_id(value: &str) -> Result<(), String> {
     }
 }
 
-fn data_directory(app: &AppHandle) -> Result<PathBuf, String> {
+pub(super) fn data_directory(app: &AppHandle) -> Result<PathBuf, String> {
     crate::configured_data_directory(app)
 }
 
@@ -88,7 +88,7 @@ pub(super) fn ensure_attachment_directory(data_directory: &Path) -> Result<PathB
 }
 
 #[cfg(unix)]
-fn restrict_directory_permissions(path: &Path) -> Result<(), String> {
+pub(super) fn restrict_directory_permissions(path: &Path) -> Result<(), String> {
     use std::os::unix::fs::PermissionsExt;
 
     fs::set_permissions(path, fs::Permissions::from_mode(0o700))
@@ -96,11 +96,14 @@ fn restrict_directory_permissions(path: &Path) -> Result<(), String> {
 }
 
 #[cfg(not(unix))]
-fn restrict_directory_permissions(_path: &Path) -> Result<(), String> {
+pub(super) fn restrict_directory_permissions(_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn safe_storage_path(data_directory: &Path, storage_key: &str) -> Result<PathBuf, String> {
+pub(super) fn safe_storage_path(
+    data_directory: &Path,
+    storage_key: &str,
+) -> Result<PathBuf, String> {
     let mut components = Path::new(storage_key).components();
     let (
         Some(Component::Normal(root_name)),
@@ -162,7 +165,7 @@ fn safe_storage_path(data_directory: &Path, storage_key: &str) -> Result<PathBuf
     Ok(target)
 }
 
-fn sanitized_file_name(source: &Path) -> Result<String, String> {
+pub(super) fn sanitized_file_name(source: &Path) -> Result<String, String> {
     let name = source
         .file_name()
         .and_then(|name| name.to_str())
@@ -179,7 +182,7 @@ fn sanitized_file_name(source: &Path) -> Result<String, String> {
     Ok(sanitized)
 }
 
-fn storage_extension(file_name: &str) -> String {
+pub(super) fn storage_extension(file_name: &str) -> String {
     let extension = Path::new(file_name)
         .extension()
         .and_then(|value| value.to_str())
@@ -193,7 +196,7 @@ fn storage_extension(file_name: &str) -> String {
     }
 }
 
-fn image_content_type(file_name: &str) -> Option<&'static str> {
+pub(super) fn image_content_type(file_name: &str) -> Option<&'static str> {
     let extension = Path::new(file_name)
         .extension()
         .and_then(|value| value.to_str())
@@ -532,7 +535,7 @@ pub(super) fn open_local_ticket_attachment_folder_impl(app: AppHandle) -> Result
         .map_err(|error| format!("Could not open the attachment folder: {error}"))
 }
 
-fn database_timestamp(connection: &Connection) -> Result<String, String> {
+pub(super) fn database_timestamp(connection: &Connection) -> Result<String, String> {
     connection
         .query_row("SELECT strftime('%Y-%m-%dT%H:%M:%fZ', 'now')", [], |row| {
             row.get(0)

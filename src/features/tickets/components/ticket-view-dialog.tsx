@@ -9,6 +9,7 @@ import {
   Minimize2,
   Paperclip,
   RefreshCw,
+  StickyNote,
 } from 'lucide-react'
 import type { TicketAttachmentCursor } from '../../../../packages/tickets/src/attachment-contract'
 import type { Ticket, TicketStatus } from '../../../../packages/tickets/src/contract'
@@ -29,6 +30,7 @@ type TicketViewDialogProps = {
   theme: Theme
   presentation: TicketDetailPresentation
   onPresentationChange: (presentation: TicketDetailPresentation) => void
+  onOpenNotes?: (ticket: Ticket) => void
   onOpenChange: (open: boolean) => void
 }
 
@@ -64,6 +66,7 @@ export function TicketViewDialog({
   theme,
   presentation,
   onPresentationChange,
+  onOpenNotes,
   onOpenChange,
 }: TicketViewDialogProps) {
   const { language, t } = useLanguage()
@@ -243,6 +246,14 @@ export function TicketViewDialog({
       )}
 
       <div className="ticket-view-content">
+        {onOpenNotes && (
+          <div className="ticket-view-notes-action">
+            <Button type="button" variant="ghost" onClick={() => onOpenNotes(ticket)}>
+              <StickyNote size={14} aria-hidden="true" />
+              {t('tickets', 'notesForTicket')}
+            </Button>
+          </div>
+        )}
         <section className="ticket-view-section" aria-labelledby="ticket-view-description-title">
           <h3 id="ticket-view-description-title">{t('tickets', 'descriptionField')}</h3>
           <p className="ticket-view-description-text">

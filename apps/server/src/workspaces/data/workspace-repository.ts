@@ -3,6 +3,8 @@ import { and, asc, count, desc, eq, gt, inArray, isNull, or, sql } from 'drizzle
 import { db } from '../../../../../packages/database/src/client.js'
 import {
   client as clientRecord,
+  note as noteRecord,
+  noteAttachment as noteAttachmentRecord,
   syncMutationReceipt,
   ticketAttachment as ticketAttachmentRecord,
   ticket as ticketRecord,
@@ -377,6 +379,28 @@ export async function deleteWorkspaceForUser(userId: string, workspaceId: string
           version: sql`${ticketAttachmentRecord.version} + 1`,
         })
         .where(and(eq(ticketAttachmentRecord.workspaceId, workspaceId), isNull(ticketAttachmentRecord.deletedAt)))
+
+      await transaction
+        .update(noteAttachmentRecord)
+        .set({
+          deletedAt: now,
+          updatedAt: now,
+          deletedByUserId: userId,
+          updatedByUserId: userId,
+          version: sql`${noteAttachmentRecord.version} + 1`,
+        })
+        .where(and(eq(noteAttachmentRecord.workspaceId, workspaceId), isNull(noteAttachmentRecord.deletedAt)))
+
+      await transaction
+        .update(noteRecord)
+        .set({
+          deletedAt: now,
+          updatedAt: now,
+          deletedByUserId: userId,
+          updatedByUserId: userId,
+          version: sql`${noteRecord.version} + 1`,
+        })
+        .where(and(eq(noteRecord.workspaceId, workspaceId), isNull(noteRecord.deletedAt)))
 
       await transaction
         .update(ticketRecord)

@@ -2,8 +2,11 @@ import { randomUUID } from 'node:crypto'
 import { and, count, eq, inArray, isNull, sql } from 'drizzle-orm'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { db, pool } from '../../../../packages/database/src/client.js'
+import { richTextDocumentSchema } from '../../../../packages/notes/src/contract.js'
 import {
   client as clientRecord,
+  note as noteRecord,
+  noteAttachment as noteAttachmentRecord,
   rateLimit,
   syncMutationReceipt,
   ticket as ticketRecord,
@@ -41,6 +44,14 @@ import {
   listTicketAttachments,
   softDeleteTicketAttachment,
 } from '../attachments/attachment-repository.js'
+import {
+  createNoteForWorkspace,
+  deleteNoteForWorkspace,
+  listNotesForWorkspace,
+  listNotesForWorkspaceForSync,
+  updateNoteForWorkspace,
+} from '../notes/note-repository.js'
+import { createNoteAttachment, listNoteAttachments } from '../notes/note-attachment-repository.js'
 
 const firstUserId = randomUUID()
 const secondUserId = randomUUID()
@@ -55,6 +66,14 @@ const clientUpdateActiveMutationId = randomUUID()
 const clientDeleteMutationId = randomUUID()
 const secondClientCreateMutationId = randomUUID()
 const ticketId = randomUUID()
+const notesTicketId = randomUUID()
+const notesTicketCreateMutationId = randomUUID()
+const noteId = randomUUID()
+const noteCreateMutationId = randomUUID()
+const noteUpdateMutationId = randomUUID()
+const noteStaleUpdateMutationId = randomUUID()
+const noteDeleteMutationId = randomUUID()
+const noteAttachmentId = randomUUID()
 const ticketClientId = randomUUID()
 const ticketClientCreateMutationId = randomUUID()
 const ticketCreateMutationId = randomUUID()
@@ -76,6 +95,8 @@ describe('PostgreSQL workspace persistence', () => {
 
   afterAll(async () => {
     await db.delete(syncMutationReceipt).where(inArray(syncMutationReceipt.userId, [firstUserId, secondUserId]))
+    await db.delete(noteAttachmentRecord).where(eq(noteAttachmentRecord.workspaceId, workspaceId))
+    await db.delete(noteRecord).where(eq(noteRecord.workspaceId, workspaceId))
     await db.delete(ticketAttachmentRecord).where(eq(ticketAttachmentRecord.workspaceId, workspaceId))
     await db.delete(ticketRecord).where(eq(ticketRecord.workspaceId, workspaceId))
     await db.delete(clientRecord).where(eq(clientRecord.workspaceId, workspaceId))
@@ -426,6 +447,151 @@ describe('PostgreSQL workspace persistence', () => {
       .where(eq(ticketAttachmentRecord.id, ticketCascadeAttachmentId))
     expect(cascadedAttachment?.deletedAt).toBeInstanceOf(Date)
     expect(cascadedAttachment?.deletedByUserId).toBe(firstUserId)
+  })
+
+  it('persists formatted notes, enforces workspace access, and synchronizes soft deletion with attachments', async () => {
+    const nextNumber = await getNextTicketOtNumber(firstUserId, workspaceId)
+    expect(nextNumber.kind).toBe('found')
+    if (nextNumber.kind !== 'found') throw new Error('Expected the next ticket number.')
+    const createdTicket = await createTicketForWorkspace(firstUserId, workspaceId, {
+      id: notesTicketId,
+      clientMutationId: notesTicketCreateMutationId,
+      otNumber: nextNumber.nextNumber,
+      clientId: null,
+      title: 'Notes integration ticket',
+      description: '',
+      priority: 'medium',
+      status: 'analysis',
+      estimatedHours: 1,
+      workedHours: 0,
+    })
+    expect(createdTicket.kind).toBe('created')
+
+    const content = richTextDocumentSchema.parse({
+      type: 'doc',
+      content: [
+        {
+          type: 'bulletList',
+          content: [
+            {
+              type: 'listItem',
+              content: [
+                { type: 'paragraph', content: [{ type: 'text', text: 'Decision', marks: [{ type: 'bold' }] }] },
+                {
+                  type: 'orderedList',
+                  attrs: { start: 1 },
+                  content: [
+                    {
+                      type: 'listItem',
+                      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Follow up' }] }],
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    })
+    const input = {
+      id: noteId,
+      clientMutationId: noteCreateMutationId,
+      ticketId: notesTicketId,
+      title: 'Deployment decision',
+      content,
+    }
+    const createdNote = await createNoteForWorkspace(firstUserId, workspaceId, input)
+    expect(createdNote.kind).toBe('created')
+    expect(await createNoteForWorkspace(firstUserId, workspaceId, input)).toEqual(createdNote)
+    if (createdNote.kind !== 'created') throw new Error('Expected the note to be created.')
+    expect(createdNote.note.content).toEqual(content)
+
+    const changed = await updateNoteForWorkspace(firstUserId, workspaceId, noteId, {
+      title: 'Updated deployment decision',
+      expectedVersion: 1,
+      clientMutationId: noteUpdateMutationId,
+    })
+    expect(changed.kind).toBe('updated')
+    const stale = await updateNoteForWorkspace(firstUserId, workspaceId, noteId, {
+      title: 'Stale edit',
+      expectedVersion: 1,
+      clientMutationId: noteStaleUpdateMutationId,
+    })
+    expect(stale.kind).toBe('version-conflict')
+    expect((await listNotesForWorkspace(secondUserId, workspaceId, null, { ticketId: null })).kind).toBe('not-found')
+
+    const pageStart = Date.now() + 5_000
+    await db.insert(noteRecord).values(
+      Array.from({ length: 26 }, (_, index) => {
+        const createdAt = new Date(pageStart + index * 1_000)
+        return {
+          id: randomUUID(),
+          workspaceId,
+          ticketId: notesTicketId,
+          title: `Paged note ${index}`,
+          content,
+          version: 1,
+          createdByUserId: firstUserId,
+          updatedByUserId: firstUserId,
+          createdAt,
+          updatedAt: createdAt,
+        }
+      }),
+    )
+    const firstPage = await listNotesForWorkspace(firstUserId, workspaceId, null, { ticketId: notesTicketId })
+    expect(firstPage.notes).toHaveLength(25)
+    expect(firstPage.nextCursor).not.toBeNull()
+    const secondPage = await listNotesForWorkspace(firstUserId, workspaceId, firstPage.nextCursor, {
+      ticketId: notesTicketId,
+    })
+    expect(secondPage.notes).toHaveLength(2)
+    expect(secondPage.nextCursor).toBeNull()
+
+    const attachment = await createNoteAttachment({
+      id: noteAttachmentId,
+      workspaceId,
+      noteId,
+      userId: firstUserId,
+      fileName: 'decision.txt',
+      contentType: 'text/plain',
+      sizeBytes: 8,
+      checksumSha256: 'd'.repeat(64),
+      storageKey: `test/${noteAttachmentId}`,
+      now: new Date(),
+    })
+    expect(attachment.kind).toBe('created')
+    expect((await listNoteAttachments(firstUserId, workspaceId, noteId, null)).attachments).toHaveLength(1)
+    expect((await listNoteAttachments(secondUserId, workspaceId, noteId, null)).kind).toBe('not-found')
+
+    const deletion = await deleteNoteForWorkspace(firstUserId, workspaceId, noteId, {
+      expectedVersion: 2,
+      clientMutationId: noteDeleteMutationId,
+    })
+    expect(deletion.kind).toBe('deleted')
+    const activeNotesFirstPage = await listNotesForWorkspace(firstUserId, workspaceId, null, {
+      ticketId: notesTicketId,
+    })
+    const activeNotesSecondPage = activeNotesFirstPage.nextCursor
+      ? await listNotesForWorkspace(firstUserId, workspaceId, activeNotesFirstPage.nextCursor, {
+          ticketId: notesTicketId,
+        })
+      : null
+    expect(
+      [...activeNotesFirstPage.notes, ...(activeNotesSecondPage?.notes ?? [])].some((item) => item.id === noteId),
+    ).toBe(false)
+    const syncPage = await listNotesForWorkspaceForSync(firstUserId, workspaceId, null)
+    const syncTail = syncPage.nextCursor
+      ? await listNotesForWorkspaceForSync(firstUserId, workspaceId, syncPage.nextCursor)
+      : null
+    expect([...syncPage.notes, ...(syncTail?.notes ?? [])].find((item) => item.id === noteId)?.deletedByUserId).toBe(
+      firstUserId,
+    )
+    const [deletedAttachment] = await db
+      .select({ deletedAt: noteAttachmentRecord.deletedAt, deletedByUserId: noteAttachmentRecord.deletedByUserId })
+      .from(noteAttachmentRecord)
+      .where(eq(noteAttachmentRecord.id, noteAttachmentId))
+    expect(deletedAttachment?.deletedAt).toBeInstanceOf(Date)
+    expect(deletedAttachment?.deletedByUserId).toBe(firstUserId)
   })
 
   it('replays activation idempotently without incrementing membership twice', async () => {

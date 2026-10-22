@@ -13,6 +13,7 @@ import { WorkspaceAppearanceFields } from './workspace-appearance-fields'
 import { WorkspaceOverview } from './workspace-overview'
 import { workspaceAccentColors } from './workspace-theme'
 import { WorkspaceSidebar } from './workspace-sidebar'
+import type { Ticket } from '../../../../packages/tickets/src/contract'
 import {
   createWorkspaceSchema,
   type WorkspaceAccent,
@@ -24,6 +25,9 @@ const ClientsExperience = lazy(() =>
 )
 const TicketsExperience = lazy(() =>
   import('../../tickets/components/tickets-experience').then((module) => ({ default: module.TicketsExperience })),
+)
+const NotesExperience = lazy(() =>
+  import('../../notes/components/notes-experience').then((module) => ({ default: module.NotesExperience })),
 )
 
 type WorkspaceExperienceProps = {
@@ -65,7 +69,8 @@ export function WorkspaceExperience({
     retry,
   } = useWorkspaceState(userId, storageMode)
   const [isCreating, setIsCreating] = useState(false)
-  const [activeView, setActiveView] = useState<'overview' | 'clients' | 'tickets'>('overview')
+  const [activeView, setActiveView] = useState<'overview' | 'clients' | 'tickets' | 'notes'>('overview')
+  const [notesTicket, setNotesTicket] = useState<Ticket | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null)
   const [name, setName] = useState('')
@@ -141,7 +146,13 @@ export function WorkspaceExperience({
           }}
           onNavigateTickets={() => {
             setIsCreating(false)
+            setNotesTicket(null)
             setActiveView('tickets')
+          }}
+          onNavigateNotes={() => {
+            setIsCreating(false)
+            setNotesTicket(null)
+            setActiveView('notes')
           }}
           onSignOut={onSignOut}
         />
@@ -282,6 +293,28 @@ export function WorkspaceExperience({
               workspaceId={activeWorkspace.id}
               storageMode={storageMode}
               theme={theme}
+              onOpenNotes={(ticket) => {
+                setNotesTicket(ticket)
+                setActiveView('notes')
+              }}
+            />
+          </Suspense>
+        ) : activeWorkspace && activeView === 'notes' ? (
+          <Suspense
+            fallback={
+              <div className="workspace-loading" role="status">
+                <span />
+                <span />
+              </div>
+            }
+          >
+            <NotesExperience
+              key={`${activeWorkspace.id}:${notesTicket?.id ?? 'all'}`}
+              userId={userId}
+              workspaceId={activeWorkspace.id}
+              storageMode={storageMode}
+              theme={theme}
+              initialTicket={notesTicket}
             />
           </Suspense>
         ) : activeWorkspace ? (

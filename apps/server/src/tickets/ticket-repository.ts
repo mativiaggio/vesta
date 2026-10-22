@@ -1,8 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { and, count, desc, eq, isNull, lt, or, sql } from 'drizzle-orm'
+import { and, count, desc, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm'
 import { db } from '../../../../packages/database/src/client.js'
 import {
   client,
+  note as noteRecord,
+  noteAttachment as noteAttachmentRecord,
   syncMutationReceipt,
   ticket,
   ticketAttachment,
@@ -449,6 +451,44 @@ export async function deleteTicketForWorkspace(
             eq(ticketAttachment.workspaceId, workspaceId),
             eq(ticketAttachment.ticketId, ticketId),
             isNull(ticketAttachment.deletedAt),
+          ),
+        )
+      await transaction
+        .update(noteRecord)
+        .set({
+          deletedAt: now,
+          deletedByUserId: userId,
+          updatedByUserId: userId,
+          updatedAt: now,
+          version: sql`${noteRecord.version} + 1`,
+        })
+        .where(
+          and(
+            eq(noteRecord.workspaceId, workspaceId),
+            eq(noteRecord.ticketId, ticketId),
+            isNull(noteRecord.deletedAt),
+          ),
+        )
+      await transaction
+        .update(noteAttachmentRecord)
+        .set({
+          deletedAt: now,
+          deletedByUserId: userId,
+          updatedByUserId: userId,
+          updatedAt: now,
+          version: sql`${noteAttachmentRecord.version} + 1`,
+        })
+        .where(
+          and(
+            eq(noteAttachmentRecord.workspaceId, workspaceId),
+            inArray(
+              noteAttachmentRecord.noteId,
+              transaction
+                .select({ id: noteRecord.id })
+                .from(noteRecord)
+                .where(and(eq(noteRecord.workspaceId, workspaceId), eq(noteRecord.ticketId, ticketId))),
+            ),
+            isNull(noteAttachmentRecord.deletedAt),
           ),
         )
       return { kind: 'deleted' as const, deletedAt: deleted.deletedAt.toISOString() }
