@@ -1,5 +1,7 @@
 mod attachments;
 mod clients;
+mod note_attachments;
+mod notes;
 mod preferences;
 mod tickets;
 mod workspaces;
@@ -11,7 +13,102 @@ use std::time::Duration;
 use tauri::AppHandle;
 
 const DATABASE_FILE_NAME: &str = "vesta.sqlite3";
-const DATABASE_VERSION: i64 = 6;
+const DATABASE_VERSION: i64 = 7;
+
+#[tauri::command]
+pub fn get_local_notes(
+    app: AppHandle,
+    workspace_id: String,
+    cursor: Option<notes::NoteCursor>,
+    ticket_id: Option<String>,
+) -> Result<notes::LocalNotePage, String> {
+    notes::get_local_notes_impl(app, workspace_id, cursor, ticket_id)
+}
+
+#[tauri::command]
+pub fn create_local_note(
+    app: AppHandle,
+    input: notes::CreateNoteInput,
+) -> Result<notes::LocalNotePage, String> {
+    notes::create_local_note_impl(app, input)
+}
+
+#[tauri::command]
+pub fn update_local_note(
+    app: AppHandle,
+    workspace_id: String,
+    note_id: String,
+    input: notes::UpdateNoteInput,
+    cursor: Option<notes::NoteCursor>,
+    ticket_filter: Option<String>,
+) -> Result<notes::LocalNotePage, String> {
+    notes::update_local_note_impl(app, workspace_id, note_id, input, cursor, ticket_filter)
+}
+
+#[tauri::command]
+pub fn delete_local_note(
+    app: AppHandle,
+    workspace_id: String,
+    note_id: String,
+    expected_version: i64,
+) -> Result<notes::LocalNoteDeletion, String> {
+    notes::delete_local_note_impl(app, workspace_id, note_id, expected_version)
+}
+
+#[tauri::command]
+pub fn get_local_note_attachments(
+    app: AppHandle,
+    workspace_id: String,
+    note_id: String,
+    cursor: Option<attachments::AttachmentCursor>,
+) -> Result<note_attachments::LocalNoteAttachmentPage, String> {
+    note_attachments::list_local_note_attachments_impl(app, workspace_id, note_id, cursor)
+}
+
+#[tauri::command]
+pub async fn add_local_note_attachments(
+    app: AppHandle,
+    workspace_id: String,
+    note_id: String,
+) -> Result<Vec<note_attachments::LocalNoteAttachment>, String> {
+    note_attachments::choose_and_add_local_note_attachments_impl(app, workspace_id, note_id)
+}
+
+#[tauri::command]
+pub fn delete_local_note_attachment(
+    app: AppHandle,
+    workspace_id: String,
+    note_id: String,
+    attachment_id: String,
+) -> Result<(), String> {
+    note_attachments::delete_local_note_attachment_impl(app, workspace_id, note_id, attachment_id)
+}
+
+#[tauri::command]
+pub fn open_local_note_attachment(
+    app: AppHandle,
+    workspace_id: String,
+    note_id: String,
+    attachment_id: String,
+) -> Result<(), String> {
+    note_attachments::open_local_note_attachment_impl(app, workspace_id, note_id, attachment_id)
+}
+
+#[tauri::command]
+pub fn read_local_note_attachment_preview(
+    app: AppHandle,
+    workspace_id: String,
+    note_id: String,
+    attachment_id: String,
+) -> Result<tauri::ipc::Response, String> {
+    note_attachments::read_local_note_attachment_preview_impl(
+        app,
+        workspace_id,
+        note_id,
+        attachment_id,
+    )
+    .map(tauri::ipc::Response::new)
+}
 
 #[tauri::command]
 pub fn get_local_ticket_attachments(
@@ -510,6 +607,61 @@ fn migrate(connection: &mut Connection) -> Result<(), String> {
             .map_err(|error| format!("Could not finish the local database upgrade: {error}"))?;
     }
 
+    if current_version < 7 {
+        let transaction = connection
+            .transaction()
+            .map_err(|error| format!("Could not prepare the local database upgrade: {error}"))?;
+        transaction
+            .execute_batch(
+                "CREATE TABLE notes (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+                    ticket_id TEXT NOT NULL REFERENCES tickets(id),
+                    title TEXT NOT NULL CHECK(length(trim(title)) BETWEEN 1 AND 160),
+                    content TEXT NOT NULL CHECK(json_valid(content)),
+                    version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    deleted_at TEXT,
+                    created_by_user_id TEXT NOT NULL,
+                    updated_by_user_id TEXT NOT NULL,
+                    deleted_by_user_id TEXT
+                );
+                CREATE INDEX note_workspace_created_active_idx
+                    ON notes(workspace_id, created_at, id) WHERE deleted_at IS NULL;
+                CREATE INDEX note_ticket_created_active_idx
+                    ON notes(ticket_id, created_at, id) WHERE deleted_at IS NULL;
+                CREATE INDEX note_workspace_updated_idx ON notes(workspace_id, updated_at, id);
+
+                CREATE TABLE note_attachments (
+                    id TEXT PRIMARY KEY NOT NULL,
+                    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+                    note_id TEXT NOT NULL REFERENCES notes(id),
+                    file_name TEXT NOT NULL CHECK(length(trim(file_name)) BETWEEN 1 AND 255),
+                    content_type TEXT NOT NULL CHECK(length(trim(content_type)) BETWEEN 1 AND 255),
+                    size_bytes INTEGER NOT NULL CHECK(size_bytes >= 0),
+                    checksum_sha256 TEXT CHECK(checksum_sha256 IS NULL OR (length(checksum_sha256) = 64 AND checksum_sha256 NOT GLOB '*[^a-f0-9]*')),
+                    storage_key TEXT NOT NULL UNIQUE,
+                    version INTEGER NOT NULL DEFAULT 1 CHECK(version > 0),
+                    created_by_user_id TEXT NOT NULL,
+                    updated_by_user_id TEXT NOT NULL,
+                    deleted_by_user_id TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    deleted_at TEXT
+                );
+                CREATE INDEX note_attachment_note_created_active_idx
+                    ON note_attachments(note_id, created_at, id) WHERE deleted_at IS NULL;
+                CREATE INDEX note_attachment_workspace_updated_idx
+                    ON note_attachments(workspace_id, updated_at, id);
+                PRAGMA user_version = 7;",
+            )
+            .map_err(|error| format!("Could not upgrade the local database: {error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("Could not finish the local database upgrade: {error}"))?;
+    }
+
     Ok(())
 }
 
@@ -547,11 +699,27 @@ mod tests {
                 |row| row.get(0),
             )
             .expect("ticket attachments table should exist");
+        let note_table_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'notes'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("notes table should exist");
+        let note_attachment_table_count: i64 = connection
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'note_attachments'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("note attachments table should exist");
 
-        assert_eq!(version, 6);
+        assert_eq!(version, 7);
         assert_eq!(client_table_count, 1);
         assert_eq!(ticket_table_count, 1);
         assert_eq!(ticket_attachment_table_count, 1);
+        assert_eq!(note_table_count, 1);
+        assert_eq!(note_attachment_table_count, 1);
         connection
             .execute(
                 "INSERT INTO app_preferences (key, value, created_at, updated_at)
@@ -575,6 +743,8 @@ mod tests {
         connection
             .execute_batch(
                 "DROP INDEX ticket_workspace_ot_number_unique;
+                DROP TABLE note_attachments;
+                DROP TABLE notes;
                 DROP TABLE ticket_attachments;
                 ALTER TABLE tickets DROP COLUMN ot_number;
                 PRAGMA user_version = 3;

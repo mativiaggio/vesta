@@ -10,6 +10,7 @@ import { createWorkspaceRoutes } from './workspaces/routes.js'
 import { createClientRoutes } from './clients/routes.js'
 import { createTicketRoutes } from './tickets/routes.js'
 import { createBlobStorage } from './attachments/create-blob-storage.js'
+import { createNoteRoutes } from './notes/routes.js'
 
 const attachmentStorage = await createBlobStorage(serverConfig.attachmentStorage)
 
@@ -38,6 +39,7 @@ app.route(
   '/api/workspaces/:workspaceId/tickets',
   createTicketRoutes(new PostgresMutationRateLimiter(), attachmentStorage),
 )
+app.route('/api/workspaces/:workspaceId/notes', createNoteRoutes(new PostgresMutationRateLimiter(), attachmentStorage))
 
 app.all('/api/auth/*', (context) => auth.handler(context.req.raw))
 

@@ -329,6 +329,11 @@
   min-width: 0;
   min-height: 210px;
   border-top: 1px solid var(--border-strong);
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.ticket-kanban-lane.is-drop-target {
+  border-top-color: var(--focus);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
 }
 .ticket-kanban-lane-heading {
   display: flex;
@@ -370,10 +375,47 @@
   border: 1px solid var(--border);
   border-radius: 7px;
   background: var(--surface);
-  cursor: grab;
 }
-.ticket-kanban-card:active {
+.ticket-kanban-card.is-dragging {
+  position: relative;
+  z-index: 2;
+  opacity: 0.38;
+}
+.ticket-kanban-drag-handle {
+  display: inline-flex;
+  width: 23px;
+  height: 23px;
+  flex: 0 0 auto;
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: grab;
+  touch-action: none;
+}
+.ticket-kanban-drag-handle:hover {
+  background: var(--subtle);
+  color: var(--foreground);
+}
+.ticket-kanban-drag-handle:active {
   cursor: grabbing;
+}
+.ticket-kanban-drag-handle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.ticket-view-notes-action {
+  display: flex;
+  justify-content: flex-end;
+  margin: -3px 0 12px;
+}
+.ticket-view-notes-action button {
+  height: 31px;
+  padding: 0 8px;
+  font-size: 11px;
 }
 .ticket-kanban-card-heading {
   display: flex;

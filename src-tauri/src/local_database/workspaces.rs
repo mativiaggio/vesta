@@ -167,6 +167,28 @@ pub(super) fn delete_local_workspace_impl(
 
     transaction
         .execute(
+            "UPDATE note_attachments SET
+                deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                deleted_by_user_id = 'local', updated_by_user_id = 'local', version = version + 1
+             WHERE workspace_id = ?1 AND deleted_at IS NULL",
+            params![workspace_id],
+        )
+        .map_err(|error| format!("Could not delete local workspace note attachments: {error}"))?;
+
+    transaction
+        .execute(
+            "UPDATE notes SET
+                deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                deleted_by_user_id = 'local', updated_by_user_id = 'local', version = version + 1
+             WHERE workspace_id = ?1 AND deleted_at IS NULL",
+            params![workspace_id],
+        )
+        .map_err(|error| format!("Could not delete local workspace notes: {error}"))?;
+
+    transaction
+        .execute(
             "UPDATE clients SET
                 deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),

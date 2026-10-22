@@ -364,6 +364,23 @@ pub(super) fn delete_local_ticket_impl(
         )
         .map_err(|error| format!("Could not delete local ticket attachments: {error}"))?;
     transaction
+        .execute(
+            "UPDATE note_attachments SET
+                deleted_at = ?1, deleted_by_user_id = 'local', updated_by_user_id = 'local',
+                updated_at = ?1, version = version + 1
+             WHERE workspace_id = ?2 AND note_id IN (SELECT id FROM notes WHERE ticket_id = ?3) AND deleted_at IS NULL",
+            params![now, workspace_id, ticket_id],
+        )
+        .map_err(|error| format!("Could not delete local note attachments: {error}"))?;
+    transaction
+        .execute(
+            "UPDATE notes SET deleted_at = ?1, deleted_by_user_id = 'local', updated_by_user_id = 'local',
+                updated_at = ?1, version = version + 1
+             WHERE workspace_id = ?2 AND ticket_id = ?3 AND deleted_at IS NULL",
+            params![now, workspace_id, ticket_id],
+        )
+        .map_err(|error| format!("Could not delete local ticket notes: {error}"))?;
+    transaction
         .commit()
         .map_err(|error| format!("Could not finish deleting the local ticket: {error}"))?;
     Ok(LocalTicketDeletion { deleted_at: now })

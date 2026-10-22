@@ -78,7 +78,7 @@ export function remoteTicketAttachmentUrl(workspaceId: string, ticketId: string,
   return attachmentsUrl(workspaceId, ticketId, `/${encodeURIComponent(attachmentId)}/content`).toString()
 }
 
-export async function fetchRemoteTicketAttachmentPreview(
+export async function fetchRemoteTicketAttachmentContent(
   workspaceId: string,
   ticketId: string,
   attachmentId: string,

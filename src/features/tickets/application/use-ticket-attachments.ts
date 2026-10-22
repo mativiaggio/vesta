@@ -7,12 +7,12 @@ import {
 import type { TicketStorageMode } from './use-ticket-state'
 import {
   deleteRemoteTicketAttachment,
-  fetchRemoteTicketAttachmentPreview,
+  fetchRemoteTicketAttachmentContent,
   fetchRemoteTicketAttachments,
-  remoteTicketAttachmentUrl,
   ticketAttachmentErrorStatus,
   uploadRemoteTicketAttachment,
 } from '../data/ticket-attachment-api-client'
+import { downloadBlob } from '../../attachments/download-blob'
 import {
   addLocalDesktopTicketAttachments,
   deleteLocalDesktopTicketAttachment,
@@ -276,20 +276,12 @@ export function useTicketAttachments(
       }
       const cachedBlob = await getLocalTicketAttachmentBlob(userId, workspaceId, attachment.id)
       if (cachedBlob) {
-        const objectUrl = URL.createObjectURL(cachedBlob)
-        const link = document.createElement('a')
-        link.href = objectUrl
-        link.download = attachment.fileName
-        link.click()
-        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000)
+        downloadBlob(cachedBlob, attachment.fileName)
         return
       }
       if (!navigator.onLine) throw new Error('Attachment is not stored on this device.')
-      const link = document.createElement('a')
-      link.href = remoteTicketAttachmentUrl(workspaceId, ticketId, attachment.id)
-      link.target = '_blank'
-      link.rel = 'noopener noreferrer'
-      link.click()
+      const blob = await fetchRemoteTicketAttachmentContent(workspaceId, ticketId, attachment.id)
+      downloadBlob(blob, attachment.fileName)
     },
     [storageMode, ticketId, userId, workspaceId],
   )
@@ -306,7 +298,7 @@ export function useTicketAttachments(
       const cachedBlob = await getLocalTicketAttachmentBlob(userId, workspaceId, attachment.id)
       if (cachedBlob) return cachedBlob.slice(0, cachedBlob.size, contentType)
       if (!navigator.onLine) throw new Error('Attachment is not stored on this device.')
-      const remoteBlob = await fetchRemoteTicketAttachmentPreview(workspaceId, ticketId, attachment.id, signal)
+      const remoteBlob = await fetchRemoteTicketAttachmentContent(workspaceId, ticketId, attachment.id, signal)
       return remoteBlob.slice(0, remoteBlob.size, contentType)
     },
     [storageMode, ticketId, userId, workspaceId],
